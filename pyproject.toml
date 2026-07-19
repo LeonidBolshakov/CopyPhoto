@@ -1,0 +1,9 @@
+[project]
+name = "copy-photo"
+version = "0.1.0"
+description = "Batch detector for printed photos photographed on a uniform background"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
