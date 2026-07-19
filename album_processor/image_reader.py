@@ -24,7 +24,7 @@ def iter_source_images(directory: Path) -> list[Path]:
 
 
 def read_image(path: Path) -> np.ndarray:
-    """Read HEIC/JPEG/PNG, apply EXIF orientation, and return BGR pixels."""
+    """Прочитать HEIC/JPEG/PNG, применить EXIF-ориентацию и вернуть пиксели BGR."""
     with Image.open(path) as opened:
         rgb = ImageOps.exif_transpose(opened).convert("RGB")
         pixels = np.asarray(rgb)
@@ -32,7 +32,7 @@ def read_image(path: Path) -> np.ndarray:
 
 
 def write_image(path: Path, image: np.ndarray, jpeg_quality: int = 92) -> None:
-    """Write an image using imencode so Cyrillic Windows paths are supported."""
+    """Записать изображение через imencode с поддержкой кириллицы в пути Windows."""
     path.parent.mkdir(parents=True, exist_ok=True)
     extension = path.suffix.lower()
     parameters: list[int] = []
@@ -40,5 +40,5 @@ def write_image(path: Path, image: np.ndarray, jpeg_quality: int = 92) -> None:
         parameters = [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]
     success, encoded = cv2.imencode(extension, image, parameters)
     if not success:
-        raise OSError(f"OpenCV could not encode {path.name}")
+        raise OSError(f"OpenCV не смог закодировать файл {path.name}")
     encoded.tofile(path)

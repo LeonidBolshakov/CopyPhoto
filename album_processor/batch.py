@@ -36,9 +36,12 @@ def process_input_directory(config: DetectorConfig) -> BatchSummary:
             detected_photos += len(result.detections)
             print(
                 f"{source.name}: найдено {len(result.detections)}, "
-                f"порог фона {result.distance_threshold:.1f}"
+                f"порог фона {result.distance_threshold:.1f}, "
+                f"покрытие фона {result.background_tile_coverage:.0%}"
             )
-        except Exception as error:  # Batch processing must continue after a bad source file.
+            if result.background_warning is not None:
+                print(f"  ВНИМАНИЕ: {result.background_warning}")
+        except Exception as error:  # Ошибка одного файла не должна останавливать пакет.
             errors.append(f"{source.name}: {error}")
 
     return BatchSummary(

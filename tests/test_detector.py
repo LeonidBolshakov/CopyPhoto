@@ -49,3 +49,39 @@ def test_blank_background_has_no_detections(tmp_path: Path) -> None:
     result = detect_photos(image, make_config(tmp_path))
 
     assert result.detections == ()
+
+
+def test_background_estimation_ignores_contaminated_border_tiles(
+    tmp_path: Path,
+) -> None:
+    background_bgr = (145, 125, 105)
+    image = np.full((900, 1200, 3), background_bgr, dtype=np.uint8)
+    draw_photo(image, (600, 450), (500, 340), 3.0)
+
+    # Имитируем стол справа и посторонний предмет вдоль верхнего края.
+    image[:, -90:] = (35, 45, 70)
+    image[:70, :300] = (210, 65, 35)
+
+    result = detect_photos(image, make_config(tmp_path))
+    expected_lab = cv2.cvtColor(
+        np.asarray([[background_bgr]], dtype=np.uint8), cv2.COLOR_BGR2LAB
+    )[0, 0]
+
+    assert len(result.detections) == 1
+    assert np.linalg.norm(np.asarray(result.background_lab) - expected_lab) < 3
+    assert result.background_tile_coverage >= 0.50
+    assert result.background_warning is None
+
+
+def test_warns_when_no_background_colour_dominates_border(tmp_path: Path) -> None:
+    image = np.empty((800, 1000, 3), dtype=np.uint8)
+    image[:400, :500] = (15, 15, 15)
+    image[:400, 500:] = (245, 245, 245)
+    image[400:, :500] = (20, 30, 210)
+    image[400:, 500:] = (210, 40, 30)
+
+    result = detect_photos(image, make_config(tmp_path))
+
+    assert result.background_tile_coverage < 0.50
+    assert result.background_warning is not None
+    assert "периметра" in result.background_warning

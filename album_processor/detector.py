@@ -18,7 +18,7 @@ class PhotoDetection:
     aspect_ratio: float
 
     def box_for_size(self, width: int, height: int) -> np.ndarray:
-        scale = np.float32((width, height))
+        scale = np.asarray((width, height), dtype=np.float32)
         return (self.normalized_box * scale).astype(np.float32)
 
 
@@ -30,6 +30,17 @@ class DetectionResult:
     annotated: np.ndarray
     background_lab: tuple[float, float, float]
     distance_threshold: float
+    background_tile_coverage: float
+    background_warning: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _BackgroundEstimate:
+    raw_mask: np.ndarray
+    color_lab: np.ndarray
+    distance_threshold: float
+    tile_coverage: float
+    warning: str | None
 
 
 def _resize_for_analysis(image: np.ndarray, max_side: int) -> np.ndarray:
@@ -41,30 +52,98 @@ def _resize_for_analysis(image: np.ndarray, max_side: int) -> np.ndarray:
     return cv2.resize(image, size, interpolation=cv2.INTER_AREA)
 
 
-def _border_pixels(image: np.ndarray, fraction: float) -> np.ndarray:
+def _border_tiles(
+    image: np.ndarray,
+    fraction: float,
+    tiles_per_side: int,
+) -> tuple[np.ndarray, ...]:
     height, width = image.shape[:2]
-    border = max(3, round(min(height, width) * fraction))
-    return np.concatenate(
-        (
-            image[:border].reshape(-1, 3),
-            image[-border:].reshape(-1, 3),
-            image[border:-border, :border].reshape(-1, 3),
-            image[border:-border, -border:].reshape(-1, 3),
-        ),
-        axis=0,
+    border = min(min(height, width), max(1, round(min(height, width) * fraction)))
+    horizontal_edges = np.linspace(0, width, tiles_per_side + 1, dtype=int)
+    vertical_edges = np.linspace(0, height, tiles_per_side + 1, dtype=int)
+    tiles: list[np.ndarray] = []
+
+    for start, end in zip(horizontal_edges[:-1], horizontal_edges[1:]):
+        if end > start:
+            tiles.append(image[:border, start:end])
+            tiles.append(image[-border:, start:end])
+    for start, end in zip(vertical_edges[:-1], vertical_edges[1:]):
+        if end > start:
+            tiles.append(image[start:end, :border])
+            tiles.append(image[start:end, -border:])
+
+    return tuple(tiles)
+
+
+def _tile_statistics(tile: np.ndarray) -> tuple[np.ndarray, float, np.ndarray]:
+    pixels = tile.reshape(-1, 3)
+    median = np.median(pixels, axis=0).astype(np.float32)
+    distances = np.linalg.norm(pixels - median, axis=1)
+    dispersion = float(np.median(distances))
+    return median, dispersion, pixels
+
+
+def _dominant_background_pixels(
+    lab: np.ndarray,
+    config: DetectorConfig,
+) -> tuple[np.ndarray, float]:
+    tiles = _border_tiles(
+        lab,
+        config.background_border_fraction,
+        config.background_tiles_per_side,
     )
+    statistics = tuple(_tile_statistics(tile) for tile in tiles)
+    homogeneous = tuple(
+        item for item in statistics if item[1] <= config.background_tile_mad_max
+    )
+
+    # Если все участки неоднородны, используем их для приблизительной оценки.
+    candidates = homogeneous or statistics
+    medians = np.stack([item[0] for item in candidates])
+    dispersions = np.asarray([item[1] for item in candidates], dtype=np.float32)
+    distances = np.linalg.norm(medians[:, None, :] - medians[None, :, :], axis=2)
+    memberships = distances <= config.background_cluster_distance
+    counts = memberships.sum(axis=1)
+
+    # Выбираем крупнейшую цветовую группу, а при равенстве — более однородную.
+    scores = tuple(
+        (int(counts[index]), -float(np.median(dispersions[memberships[index]])))
+        for index in range(len(candidates))
+    )
+    seed_index = max(range(len(candidates)), key=scores.__getitem__)
+    selected = tuple(
+        item for item, keep in zip(candidates, memberships[seed_index]) if keep
+    )
+    pixels = np.concatenate([item[2] for item in selected], axis=0)
+    coverage = len(selected) / len(tiles)
+    return pixels, coverage
+
+
+def _refine_background(
+    pixels: np.ndarray,
+    config: DetectorConfig,
+) -> np.ndarray:
+    background = np.median(pixels, axis=0).astype(np.float32)
+    for _ in range(config.background_refinement_iterations):
+        distances = np.linalg.norm(pixels - background, axis=1)
+        cutoff = float(np.quantile(distances, config.background_inlier_fraction))
+        inliers = pixels[distances <= cutoff]
+        background = np.median(inliers, axis=0).astype(np.float32)
+    return background
 
 
 def _background_mask(
     preview: np.ndarray, config: DetectorConfig
-) -> tuple[np.ndarray, np.ndarray, float]:
+) -> _BackgroundEstimate:
     lab = cv2.cvtColor(preview, cv2.COLOR_BGR2LAB).astype(np.float32)
-    border = _border_pixels(lab, config.background_border_fraction)
-    background = np.median(border, axis=0).astype(np.float32)
+    background_pixels, coverage = _dominant_background_pixels(lab, config)
+    background = _refine_background(background_pixels, config)
 
-    border_distance = np.linalg.norm(border - background, axis=1)
-    median_distance = float(np.median(border_distance))
-    mad = float(np.median(np.abs(border_distance - median_distance)))
+    # Уточнённый центр не учитывает выбросы, а порог сохраняет естественный
+    # градиент освещения на всех выбранных участках фона.
+    background_distance = np.linalg.norm(background_pixels - background, axis=1)
+    median_distance = float(np.median(background_distance))
+    mad = float(np.median(np.abs(background_distance - median_distance)))
     robust_sigma = 1.4826 * mad
     threshold = max(
         config.background_distance_min,
@@ -73,7 +152,19 @@ def _background_mask(
 
     distance = np.linalg.norm(lab - background, axis=2)
     foreground = np.where(distance > threshold, 255, 0).astype(np.uint8)
-    return foreground, background, threshold
+    warnings: list[str] = []
+    if coverage < config.background_min_cluster_fraction:
+        warnings.append(f"фон занимает только {coverage:.0%} участков периметра")
+    if threshold > config.background_threshold_warning:
+        warnings.append(f"аномальный порог фона {threshold:.1f}")
+
+    return _BackgroundEstimate(
+        raw_mask=foreground,
+        color_lab=background,
+        distance_threshold=threshold,
+        tile_coverage=coverage,
+        warning="; ".join(warnings) or None,
+    )
 
 
 def _clean_mask(mask: np.ndarray, config: DetectorConfig) -> np.ndarray:
@@ -128,7 +219,7 @@ def _candidate_from_contour(
     if abs(angle) > config.max_deskew_angle:
         return None
 
-    normalized_box = box / np.float32((width, height))
+    normalized_box = box / np.asarray((width, height), dtype=np.float32)
     return PhotoDetection(
         normalized_box=normalized_box,
         angle=angle,
@@ -138,14 +229,18 @@ def _candidate_from_contour(
     )
 
 
-def _annotate(preview: np.ndarray, detections: tuple[PhotoDetection, ...]) -> np.ndarray:
+def _annotate(
+    preview: np.ndarray,
+    detections: tuple[PhotoDetection, ...],
+    background_warning: str | None,
+) -> np.ndarray:
     annotated = preview.copy()
     height, width = annotated.shape[:2]
     for index, detection in enumerate(detections, start=1):
         box = np.rint(detection.box_for_size(width, height)).astype(np.int32)
         cv2.polylines(annotated, [box], True, (0, 220, 0), 3, cv2.LINE_AA)
         center = tuple(np.rint(box.mean(axis=0)).astype(int))
-        label = f"{index}: {detection.angle:+.1f} deg"
+        label = f"{index}: {detection.angle:+.1f}"
         cv2.putText(
             annotated,
             label,
@@ -166,16 +261,38 @@ def _annotate(preview: np.ndarray, detections: tuple[PhotoDetection, ...]) -> np
             2,
             cv2.LINE_AA,
         )
+    if background_warning is not None:
+        cv2.rectangle(annotated, (2, 2), (width - 3, height - 3), (0, 0, 255), 8)
+        cv2.putText(
+            annotated,
+            "!!!",
+            (20, 42),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.85,
+            (0, 0, 0),
+            5,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            annotated,
+            "!!!",
+            (20, 42),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.85,
+            (0, 0, 255),
+            2,
+            cv2.LINE_AA,
+        )
     return annotated
 
 
 def detect_photos(image: np.ndarray, config: DetectorConfig) -> DetectionResult:
     if image.ndim != 3 or image.shape[2] != 3:
-        raise ValueError("detect_photos expects a BGR image with three channels")
+        raise ValueError("detect_photos ожидает трёхканальное изображение BGR")
 
     preview = _resize_for_analysis(image, config.analysis_max_side)
-    raw_mask, background, threshold = _background_mask(preview, config)
-    mask = _clean_mask(raw_mask, config)
+    background = _background_mask(preview, config)
+    mask = _clean_mask(background.raw_mask, config)
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     height, width = preview.shape[:2]
@@ -185,13 +302,19 @@ def detect_photos(image: np.ndarray, config: DetectorConfig) -> DetectionResult:
         if (candidate := _candidate_from_contour(contour, width, height, config)) is not None
     )
     detections = tuple(sorted(candidates, key=lambda item: item.area_fraction, reverse=True))
-    annotated = _annotate(preview, detections)
+    annotated = _annotate(preview, detections, background.warning)
 
     return DetectionResult(
         detections=detections,
         preview=preview,
         mask=mask,
         annotated=annotated,
-        background_lab=tuple(float(value) for value in background),
-        distance_threshold=threshold,
+        background_lab=(
+            float(background.color_lab[0]),
+            float(background.color_lab[1]),
+            float(background.color_lab[2]),
+        ),
+        distance_threshold=background.distance_threshold,
+        background_tile_coverage=background.tile_coverage,
+        background_warning=background.warning,
     )
