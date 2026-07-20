@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from math import atan2, degrees
 
 import cv2
@@ -22,16 +23,68 @@ class PhotoDetection:
         return (self.normalized_box * scale).astype(np.float32)
 
 
+class ContourRejectionReason(Enum):
+    AREA_TOO_SMALL = "площадь меньше допустимой"
+    AREA_TOO_LARGE = "площадь больше допустимой"
+    INVALID_RECTANGLE = "невозможно построить прямоугольную рамку"
+    SIDE_TOO_SHORT = "короткая сторона меньше допустимой"
+    LOW_RECTANGULARITY = "контур недостаточно прямоугольный"
+    INVALID_ASPECT_RATIO = "неподходящее соотношение сторон"
+    ANGLE_TOO_LARGE = "наклон превышает допустимый"
+
+
+@dataclass(frozen=True, slots=True)
+class ContourRejection:
+    reason: ContourRejectionReason
+    normalized_contour: np.ndarray
+    details: str
+
+    def contour_for_size(self, width: int, height: int) -> np.ndarray:
+        scale = np.asarray((width, height), dtype=np.float32)
+        return (self.normalized_contour * scale).astype(np.float32)
+
+
+class DetectionWarningCode(Enum):
+    LOW_BACKGROUND_COVERAGE = "неоднозначный фон"
+    HIGH_BACKGROUND_THRESHOLD = "неоднородный фон"
+    NO_PHOTOS = "фотографии не найдены"
+
+
+@dataclass(frozen=True, slots=True)
+class DetectionWarning:
+    code: DetectionWarningCode
+    message: str
+    recommendation: str
+
+    @property
+    def text(self) -> str:
+        return f"{self.message}. {self.recommendation}"
+
+
 @dataclass(frozen=True, slots=True)
 class DetectionResult:
     detections: tuple[PhotoDetection, ...]
+    rejections: tuple[ContourRejection, ...]
+    warnings: tuple[DetectionWarning, ...]
     preview: np.ndarray
     mask: np.ndarray
     annotated: np.ndarray
     background_lab: tuple[float, float, float]
     distance_threshold: float
     background_tile_coverage: float
-    background_warning: str | None
+
+    @property
+    def background_warning(self) -> str | None:
+        background_warnings = tuple(
+            warning.text
+            for warning in self.warnings
+            if warning.code
+            in {
+                DetectionWarningCode.LOW_BACKGROUND_COVERAGE,
+                DetectionWarningCode.HIGH_BACKGROUND_THRESHOLD,
+            }
+        )
+        return "; ".join(background_warnings) or None
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +93,7 @@ class _BackgroundEstimate:
     color_lab: np.ndarray
     distance_threshold: float
     tile_coverage: float
-    warning: str | None
+    warnings: tuple[DetectionWarning, ...]
 
 
 def _resize_for_analysis(image: np.ndarray, max_side: int) -> np.ndarray:
@@ -152,18 +205,38 @@ def _background_mask(
 
     distance = np.linalg.norm(lab - background, axis=2)
     foreground = np.where(distance > threshold, 255, 0).astype(np.uint8)
-    warnings: list[str] = []
+    warnings: list[DetectionWarning] = []
     if coverage < config.background_min_cluster_fraction:
-        warnings.append(f"фон занимает только {coverage:.0%} участков периметра")
+        warnings.append(
+            DetectionWarning(
+                code=DetectionWarningCode.LOW_BACKGROUND_COVERAGE,
+                message=(
+                    "доминирующий цвет фона найден только на "
+                    f"{coverage:.0%} участков периметра"
+                ),
+                recommendation=(
+                    "оставьте подложку видимой по всему краю кадра и уберите "
+                    "посторонние предметы"
+                ),
+            )
+        )
     if threshold > config.background_threshold_warning:
-        warnings.append(f"аномальный порог фона {threshold:.1f}")
+        warnings.append(
+            DetectionWarning(
+                code=DetectionWarningCode.HIGH_BACKGROUND_THRESHOLD,
+                message=f"порог отделения фона необычно высок: {threshold:.1f}",
+                recommendation=(
+                    "сделайте освещение подложки равномернее и исключите блики и тени"
+                ),
+            )
+        )
 
     return _BackgroundEstimate(
         raw_mask=foreground,
         color_lab=background,
         distance_threshold=threshold,
         tile_coverage=coverage,
-        warning="; ".join(warnings) or None,
+        warnings=tuple(warnings),
     )
 
 
@@ -186,56 +259,142 @@ def _nearest_axis_angle(box: np.ndarray) -> float:
     return (raw_angle + 45.0) % 90.0 - 45.0
 
 
-def _candidate_from_contour(
+def _rejection(
+    contour: np.ndarray,
+    width: int,
+    height: int,
+    reason: ContourRejectionReason,
+    details: str,
+) -> ContourRejection:
+    scale = np.asarray((width, height), dtype=np.float32)
+    normalized_contour = contour.astype(np.float32) / scale
+    return ContourRejection(
+        reason=reason,
+        normalized_contour=normalized_contour,
+        details=details,
+    )
+
+
+def _evaluate_contour(
     contour: np.ndarray,
     width: int,
     height: int,
     config: DetectorConfig,
-) -> PhotoDetection | None:
+) -> tuple[PhotoDetection | None, ContourRejection | None]:
     image_area = float(width * height)
     contour_area = float(cv2.contourArea(contour))
     area_fraction = contour_area / image_area
-    if not config.min_photo_area_fraction <= area_fraction <= config.max_photo_area_fraction:
-        return None
+    if area_fraction < config.min_photo_area_fraction:
+        return None, _rejection(
+            contour,
+            width,
+            height,
+            ContourRejectionReason.AREA_TOO_SMALL,
+            (
+                f"доля площади {area_fraction:.2%}, требуется не меньше "
+                f"{config.min_photo_area_fraction:.2%}"
+            ),
+        )
+    if area_fraction > config.max_photo_area_fraction:
+        return None, _rejection(
+            contour,
+            width,
+            height,
+            ContourRejectionReason.AREA_TOO_LARGE,
+            (
+                f"доля площади {area_fraction:.2%}, допускается не больше "
+                f"{config.max_photo_area_fraction:.2%}"
+            ),
+        )
 
     rectangle = cv2.minAreaRect(contour)
     rect_width, rect_height = rectangle[1]
     if rect_width <= 0 or rect_height <= 0:
-        return None
-    if min(rect_width, rect_height) / min(width, height) < config.min_photo_side_fraction:
-        return None
+        return None, _rejection(
+            contour,
+            width,
+            height,
+            ContourRejectionReason.INVALID_RECTANGLE,
+            "ширина или высота построенной рамки равна нулю",
+        )
+    side_fraction = min(rect_width, rect_height) / min(width, height)
+    if side_fraction < config.min_photo_side_fraction:
+        return None, _rejection(
+            contour,
+            width,
+            height,
+            ContourRejectionReason.SIDE_TOO_SHORT,
+            (
+                f"доля короткой стороны {side_fraction:.2%}, требуется не меньше "
+                f"{config.min_photo_side_fraction:.2%}"
+            ),
+        )
 
     rectangle_area = float(rect_width * rect_height)
     rectangularity = contour_area / rectangle_area
     if rectangularity < config.min_rectangularity:
-        return None
+        return None, _rejection(
+            contour,
+            width,
+            height,
+            ContourRejectionReason.LOW_RECTANGULARITY,
+            (
+                f"прямоугольность {rectangularity:.3f}, требуется не меньше "
+                f"{config.min_rectangularity:.3f}"
+            ),
+        )
 
     aspect_ratio = max(rect_width, rect_height) / min(rect_width, rect_height)
     if not config.min_aspect_ratio <= aspect_ratio <= config.max_aspect_ratio:
-        return None
+        return None, _rejection(
+            contour,
+            width,
+            height,
+            ContourRejectionReason.INVALID_ASPECT_RATIO,
+            (
+                f"соотношение сторон {aspect_ratio:.2f}, допустимый диапазон "
+                f"[{config.min_aspect_ratio:.2f}, {config.max_aspect_ratio:.2f}]"
+            ),
+        )
 
     box = cv2.boxPoints(rectangle).astype(np.float32)
     angle = _nearest_axis_angle(box)
     if abs(angle) > config.max_deskew_angle:
-        return None
+        return None, _rejection(
+            contour,
+            width,
+            height,
+            ContourRejectionReason.ANGLE_TOO_LARGE,
+            (
+                f"наклон {angle:+.1f}°, допускается не больше "
+                f"{config.max_deskew_angle:.1f}° по модулю"
+            ),
+        )
 
     normalized_box = box / np.asarray((width, height), dtype=np.float32)
-    return PhotoDetection(
-        normalized_box=normalized_box,
-        angle=angle,
-        area_fraction=area_fraction,
-        rectangularity=rectangularity,
-        aspect_ratio=aspect_ratio,
+    return (
+        PhotoDetection(
+            normalized_box=normalized_box,
+            angle=angle,
+            area_fraction=area_fraction,
+            rectangularity=rectangularity,
+            aspect_ratio=aspect_ratio,
+        ),
+        None,
     )
 
 
 def _annotate(
     preview: np.ndarray,
     detections: tuple[PhotoDetection, ...],
-    background_warning: str | None,
+    rejections: tuple[ContourRejection, ...],
+    warnings: tuple[DetectionWarning, ...],
 ) -> np.ndarray:
     annotated = preview.copy()
     height, width = annotated.shape[:2]
+    for rejection in rejections:
+        contour = np.rint(rejection.contour_for_size(width, height)).astype(np.int32)
+        cv2.polylines(annotated, [contour], True, (0, 165, 255), 1, cv2.LINE_AA)
     for index, detection in enumerate(detections, start=1):
         box = np.rint(detection.box_for_size(width, height)).astype(np.int32)
         cv2.polylines(annotated, [box], True, (0, 220, 0), 3, cv2.LINE_AA)
@@ -261,7 +420,7 @@ def _annotate(
             2,
             cv2.LINE_AA,
         )
-    if background_warning is not None:
+    if warnings:
         cv2.rectangle(annotated, (2, 2), (width - 3, height - 3), (0, 0, 255), 8)
         cv2.putText(
             annotated,
@@ -296,16 +455,49 @@ def detect_photos(image: np.ndarray, config: DetectorConfig) -> DetectionResult:
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     height, width = preview.shape[:2]
-    candidates = (
-        candidate
-        for contour in contours
-        if (candidate := _candidate_from_contour(contour, width, height, config)) is not None
+    evaluations = tuple(
+        _evaluate_contour(contour, width, height, config) for contour in contours
     )
-    detections = tuple(sorted(candidates, key=lambda item: item.area_fraction, reverse=True))
-    annotated = _annotate(preview, detections, background.warning)
+    detections = tuple(
+        sorted(
+            (candidate for candidate, _ in evaluations if candidate is not None),
+            key=lambda item: item.area_fraction,
+            reverse=True,
+        )
+    )
+    rejections = tuple(
+        rejection for _, rejection in evaluations if rejection is not None
+    )
+    warnings = list(background.warnings)
+    if not detections:
+        if rejections:
+            reason_counts = {
+                reason: sum(item.reason is reason for item in rejections)
+                for reason in ContourRejectionReason
+            }
+            main_reason = max(reason_counts, key=reason_counts.__getitem__)
+            recommendation = (
+                f"основная причина отклонения: {main_reason.value}; "
+                "проверьте диагностическую маску и параметры детектора"
+            )
+        else:
+            recommendation = (
+                "проверьте контраст фотографий с подложкой и равномерность освещения"
+            )
+        warnings.append(
+            DetectionWarning(
+                code=DetectionWarningCode.NO_PHOTOS,
+                message="на изображении не найдено ни одной фотографии",
+                recommendation=recommendation,
+            )
+        )
+    result_warnings = tuple(warnings)
+    annotated = _annotate(preview, detections, rejections, result_warnings)
 
     return DetectionResult(
         detections=detections,
+        rejections=rejections,
+        warnings=result_warnings,
         preview=preview,
         mask=mask,
         annotated=annotated,
@@ -316,5 +508,4 @@ def detect_photos(image: np.ndarray, config: DetectorConfig) -> DetectionResult:
         ),
         distance_threshold=background.distance_threshold,
         background_tile_coverage=background.tile_coverage,
-        background_warning=background.warning,
     )

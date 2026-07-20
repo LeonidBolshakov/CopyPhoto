@@ -4,10 +4,11 @@ import cv2
 import numpy as np
 import pytest
 
-import album_processor.batch as batch_module
+import album_processor.processor as processor_module
 from album_processor.batch import process_input_directory
 from album_processor.config import DetectorConfig, ExportConfig
 from album_processor.image_reader import read_image, write_image
+from album_processor.processor import AlbumProcessor
 
 
 def make_detector_config(tmp_path: Path) -> DetectorConfig:
@@ -101,7 +102,7 @@ def test_batch_reports_crop_error_without_stopping(
     def fail_crop(*args: object, **kwargs: object) -> np.ndarray:
         raise ValueError("синтетическая ошибка кадрирования")
 
-    monkeypatch.setattr(batch_module, "crop_photo", fail_crop)
+    monkeypatch.setattr(processor_module, "crop_photo", fail_crop)
 
     summary = process_input_directory(detector_config, export_config)
 
@@ -126,3 +127,25 @@ def test_batch_can_export_lossless_png(tmp_path: Path) -> None:
     assert target.exists()
     assert not (export_config.output_dir / "album_001.jpg").exists()
     assert read_image(target).shape[1] > read_image(target).shape[0]
+
+
+def test_album_processor_returns_structured_report_without_console_output(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    detector_config = make_detector_config(tmp_path)
+    export_config = make_export_config(tmp_path)
+    make_source(detector_config.input_dir / "good.png")
+
+    summary = AlbumProcessor(detector_config, export_config).process()
+
+    assert capsys.readouterr().out == ""
+    assert len(summary.files) == 1
+    report = summary.files[0]
+    assert report.source.name == "good.png"
+    assert report.processed
+    assert report.detected_photos == 1
+    assert report.saved_photos == 1
+    assert report.saved_paths[0].name == "album_001.jpg"
+    assert report.distance_threshold is not None
+    assert report.background_tile_coverage is not None

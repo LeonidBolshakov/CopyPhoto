@@ -4,7 +4,11 @@ import cv2
 import numpy as np
 
 from album_processor.config import DetectorConfig
-from album_processor.detector import detect_photos
+from album_processor.detector import (
+    ContourRejectionReason,
+    DetectionWarningCode,
+    detect_photos,
+)
 
 
 def make_config(tmp_path: Path) -> DetectorConfig:
@@ -49,6 +53,10 @@ def test_blank_background_has_no_detections(tmp_path: Path) -> None:
     result = detect_photos(image, make_config(tmp_path))
 
     assert result.detections == ()
+    assert any(
+        warning.code is DetectionWarningCode.NO_PHOTOS
+        for warning in result.warnings
+    )
 
 
 def test_background_estimation_ignores_contaminated_border_tiles(
@@ -85,3 +93,24 @@ def test_warns_when_no_background_colour_dominates_border(tmp_path: Path) -> Non
     assert result.background_tile_coverage < 0.50
     assert result.background_warning is not None
     assert "периметра" in result.background_warning
+    assert all(warning.recommendation for warning in result.warnings)
+
+
+def test_reports_reasons_for_rejected_contours(tmp_path: Path) -> None:
+    image = np.full((800, 1000, 3), (145, 125, 105), dtype=np.uint8)
+    draw_photo(image, (250, 400), (100, 80), 0.0)
+    draw_photo(image, (650, 400), (400, 100), 0.0)
+
+    result = detect_photos(image, make_config(tmp_path))
+    reasons = {rejection.reason for rejection in result.rejections}
+
+    assert ContourRejectionReason.AREA_TOO_SMALL in reasons
+    assert ContourRejectionReason.INVALID_ASPECT_RATIO in reasons
+    assert all(rejection.details for rejection in result.rejections)
+    assert all(
+        np.all(
+            (rejection.normalized_contour >= 0.0)
+            & (rejection.normalized_contour <= 1.0)
+        )
+        for rejection in result.rejections
+    )
