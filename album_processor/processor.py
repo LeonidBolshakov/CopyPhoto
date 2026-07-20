@@ -11,6 +11,7 @@ from album_processor.config import (
     DEFAULT_ENHANCER_CONFIG,
     CropperConfig,
     DetectorConfig,
+    DiagnosticsConfig,
     EnhancerConfig,
     ExportConfig,
 )
@@ -90,11 +91,13 @@ class AlbumProcessor:
         export_config: ExportConfig,
         cropper_config: CropperConfig = DEFAULT_CROPPER_CONFIG,
         enhancer_config: EnhancerConfig = DEFAULT_ENHANCER_CONFIG,
+        diagnostics_config: DiagnosticsConfig | None = None,
     ) -> None:
         self.detector_config = detector_config
         self.export_config = export_config
         self.cropper_config = cropper_config
         self.enhancer_config = enhancer_config
+        self.diagnostics_config = diagnostics_config
 
     def process(self) -> BatchSummary:
         self._prepare_directories()
@@ -125,8 +128,12 @@ class AlbumProcessor:
 
     def _prepare_directories(self) -> None:
         self.detector_config.input_dir.mkdir(parents=True, exist_ok=True)
-        self.detector_config.debug_dir.mkdir(parents=True, exist_ok=True)
         self.export_config.output_dir.mkdir(parents=True, exist_ok=True)
+        if (
+            self.diagnostics_config is not None
+            and self.diagnostics_config.enabled
+        ):
+            self.diagnostics_config.output_dir.mkdir(parents=True, exist_ok=True)
 
     def _process_source(
         self,
@@ -160,12 +167,20 @@ class AlbumProcessor:
         saved_paths: list[Path] = []
         failed_photos = 0
 
-        try:
-            self._write_diagnostics(source, result)
-        except Exception as error:
-            errors.append(
-                f"{source.name}: не удалось записать диагностику: {error}"
-            )
+        if (
+            self.diagnostics_config is not None
+            and self.diagnostics_config.enabled
+        ):
+            try:
+                self._write_diagnostics(
+                    source,
+                    result,
+                    self.diagnostics_config.output_dir,
+                )
+            except Exception as error:
+                errors.append(
+                    f"{source.name}: не удалось записать диагностику: {error}"
+                )
 
         for photo_number, detection in enumerate(result.detections, start=1):
             try:
@@ -198,13 +213,18 @@ class AlbumProcessor:
             next_index,
         )
 
-    def _write_diagnostics(self, source: Path, result: DetectionResult) -> None:
+    def _write_diagnostics(
+        self,
+        source: Path,
+        result: DetectionResult,
+        output_dir: Path,
+    ) -> None:
         write_image(
-            self.detector_config.debug_dir / f"{source.stem}_detected.jpg",
+            output_dir / f"{source.stem}_detected.jpg",
             result.annotated,
         )
         write_image(
-            self.detector_config.debug_dir / f"{source.stem}_mask.png",
+            output_dir / f"{source.stem}_mask.png",
             result.mask,
         )
 

@@ -8,6 +8,7 @@ import album_processor.processor as processor_module
 from album_processor.batch import process_input_directory
 from album_processor.config import (
     DetectorConfig,
+    DiagnosticsConfig,
     EnhancementMode,
     EnhancerConfig,
     ExportConfig,
@@ -19,7 +20,6 @@ from album_processor.processor import AlbumProcessor
 def make_detector_config(tmp_path: Path) -> DetectorConfig:
     return DetectorConfig(
         input_dir=tmp_path / "input",
-        debug_dir=tmp_path / "debug",
         analysis_max_side=1600,
         background_distance_min=12.0,
         morph_kernel_fraction=0.006,
@@ -186,3 +186,44 @@ def test_album_processor_applies_configured_enhancement(
 
     assert summary.saved_photos == 1
     assert received_configs == [enhancer_config]
+
+
+def test_enabled_debug_mode_writes_diagnostic_files(tmp_path: Path) -> None:
+    detector_config = make_detector_config(tmp_path)
+    export_config = make_export_config(tmp_path, output_format="png")
+    diagnostics_config = DiagnosticsConfig(
+        output_dir=tmp_path / "diagnostics",
+        enabled=True,
+    )
+    make_source(detector_config.input_dir / "album.png")
+
+    summary = AlbumProcessor(
+        detector_config,
+        export_config,
+        diagnostics_config=diagnostics_config,
+    ).process()
+
+    assert summary.saved_photos == 1
+    assert (diagnostics_config.output_dir / "album_detected.jpg").exists()
+    assert (diagnostics_config.output_dir / "album_mask.png").exists()
+
+
+def test_disabled_debug_mode_does_not_create_diagnostic_directory(
+    tmp_path: Path,
+) -> None:
+    detector_config = make_detector_config(tmp_path)
+    export_config = make_export_config(tmp_path, output_format="png")
+    diagnostics_config = DiagnosticsConfig(
+        output_dir=tmp_path / "diagnostics",
+        enabled=False,
+    )
+    make_source(detector_config.input_dir / "album.png")
+
+    summary = AlbumProcessor(
+        detector_config,
+        export_config,
+        diagnostics_config=diagnostics_config,
+    ).process()
+
+    assert summary.saved_photos == 1
+    assert not diagnostics_config.output_dir.exists()

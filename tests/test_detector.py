@@ -14,7 +14,6 @@ from album_processor.detector import (
 def make_config(tmp_path: Path) -> DetectorConfig:
     return DetectorConfig(
         input_dir=tmp_path / "input",
-        debug_dir=tmp_path / "debug",
         analysis_max_side=1600,
         background_distance_min=12.0,
         morph_kernel_fraction=0.006,

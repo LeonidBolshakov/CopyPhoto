@@ -78,6 +78,16 @@ DEFAULT_ENHANCER_CONFIG = EnhancerConfig()
 
 
 @dataclass(frozen=True, slots=True)
+class DiagnosticsConfig:
+    output_dir: Path
+    enabled: bool = True
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.enabled, bool):
+            raise ValueError("признак режима отладки должен иметь значение Да или Нет")
+
+
+@dataclass(frozen=True, slots=True)
 class ExportConfig:
     output_dir: Path
     filename_prefix: str = "photo"
@@ -108,7 +118,6 @@ class ExportConfig:
 @dataclass(frozen=True, slots=True)
 class DetectorConfig:
     input_dir: Path
-    debug_dir: Path
 
     # Уменьшенная копия используется только для быстрого поиска контуров.
     analysis_max_side: int = 1600

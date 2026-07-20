@@ -5,6 +5,7 @@ from album_processor.config import (
     DEFAULT_ENHANCER_CONFIG,
     CropperConfig,
     DetectorConfig,
+    DiagnosticsConfig,
     EnhancerConfig,
     ExportConfig,
 )
@@ -16,6 +17,7 @@ def process_input_directory(
     export_config: ExportConfig,
     cropper_config: CropperConfig = DEFAULT_CROPPER_CONFIG,
     enhancer_config: EnhancerConfig = DEFAULT_ENHANCER_CONFIG,
+    diagnostics_config: DiagnosticsConfig | None = None,
 ) -> BatchSummary:
     """Совместимый функциональный интерфейс пакетной обработки."""
     return AlbumProcessor(
@@ -23,4 +25,5 @@ def process_input_directory(
         export_config,
         cropper_config,
         enhancer_config,
+        diagnostics_config,
     ).process()

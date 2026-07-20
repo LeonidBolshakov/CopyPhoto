@@ -7,6 +7,7 @@ from pathlib import Path
 from album_processor.config import (
     CropperConfig,
     DetectorConfig,
+    DiagnosticsConfig,
     EnhancementMode,
     EnhancerConfig,
     ExportConfig,
@@ -27,6 +28,7 @@ class ApplicationSettings:
     cropper_config: CropperConfig
     enhancer_config: EnhancerConfig
     export_config: ExportConfig
+    diagnostics_config: DiagnosticsConfig
 
 
 def _required_value(
@@ -136,13 +138,6 @@ def load_settings(
         "Готовые фотографии",
         project_dir,
     )
-    debug_dir = _directory_value(
-        parser,
-        "Каталоги",
-        "Диагностика",
-        project_dir,
-    )
-
     output_format = _required_value(parser, "Сохранение", "Формат").casefold()
     if output_format not in {"jpeg", "png"}:
         raise SettingsError(
@@ -170,6 +165,18 @@ def load_settings(
             "находиться в диапазоне от 0 до 100"
         )
 
+    diagnostics_enabled = _yes_no_value(
+        parser,
+        "Диагностика",
+        "Режим отладки",
+    )
+    diagnostics_dir = _directory_value(
+        parser,
+        "Диагностика",
+        "Каталог",
+        project_dir,
+    )
+
     try:
         export_config = ExportConfig(
             output_dir=output_dir,
@@ -184,7 +191,6 @@ def load_settings(
     return ApplicationSettings(
         detector_config=DetectorConfig(
             input_dir=input_dir,
-            debug_dir=debug_dir,
         ),
         cropper_config=CropperConfig(
             rotate_portrait_to_landscape=rotate_portrait,
@@ -194,4 +200,8 @@ def load_settings(
             intensity=intensity_percent / 100.0,
         ),
         export_config=export_config,
+        diagnostics_config=DiagnosticsConfig(
+            output_dir=diagnostics_dir,
+            enabled=diagnostics_enabled,
+        ),
     )

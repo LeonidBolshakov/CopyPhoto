@@ -67,12 +67,16 @@ def main() -> int:
     cropper_config = application_settings.cropper_config
     enhancer_config = application_settings.enhancer_config
     export_config = application_settings.export_config
+    diagnostics_config = application_settings.diagnostics_config
 
     print("CopyPhoto: пакетное выделение бумажных фотографий")
     print(f"Настройки:      {SETTINGS_PATH}")
     print(f"Входная папка:  {detector_config.input_dir}")
     print(f"Результаты:     {export_config.output_dir}")
-    print(f"Диагностика:    {detector_config.debug_dir}")
+    if diagnostics_config.enabled:
+        print(f"Диагностика:    включена, {diagnostics_config.output_dir}")
+    else:
+        print("Диагностика:    отключена")
     if export_config.output_format == "jpeg":
         format_description = f"JPEG, качество {export_config.jpeg_quality}"
     else:
@@ -98,6 +102,7 @@ def main() -> int:
         export_config,
         cropper_config=cropper_config,
         enhancer_config=enhancer_config,
+        diagnostics_config=diagnostics_config,
     ).process()
     if not summary.files:
         print("Во входной папке нет поддерживаемых изображений.")
