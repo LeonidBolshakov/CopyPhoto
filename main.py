@@ -4,7 +4,7 @@ from album_processor.processor import (
     BatchSummary,
     SourceProcessingReport,
 )
-from settings import CONFIG, ENHANCER_CONFIG, EXPORT_CONFIG
+from settings import SETTINGS_PATH, SettingsError, load_settings
 
 
 def _print_source_report(report: SourceProcessingReport) -> None:
@@ -55,28 +55,49 @@ def _print_summary(summary: BatchSummary) -> None:
 
 
 def main() -> int:
+    try:
+        application_settings = load_settings()
+    except SettingsError as error:
+        print("CopyPhoto: ошибка настроек")
+        print(f"Файл: {SETTINGS_PATH}")
+        print(f"Причина: {error}")
+        return 2
+
+    detector_config = application_settings.detector_config
+    cropper_config = application_settings.cropper_config
+    enhancer_config = application_settings.enhancer_config
+    export_config = application_settings.export_config
+
     print("CopyPhoto: пакетное выделение бумажных фотографий")
-    print(f"Входная папка: {CONFIG.input_dir}")
-    print(f"Результаты:     {EXPORT_CONFIG.output_dir}")
-    print(f"Диагностика:    {CONFIG.debug_dir}")
-    if EXPORT_CONFIG.output_format == "jpeg":
-        format_description = f"JPEG, качество {EXPORT_CONFIG.jpeg_quality}"
+    print(f"Настройки:      {SETTINGS_PATH}")
+    print(f"Входная папка:  {detector_config.input_dir}")
+    print(f"Результаты:     {export_config.output_dir}")
+    print(f"Диагностика:    {detector_config.debug_dir}")
+    if export_config.output_format == "jpeg":
+        format_description = f"JPEG, качество {export_config.jpeg_quality}"
     else:
         format_description = "PNG без потерь"
     print(
-        f"Имена:          {EXPORT_CONFIG.filename_prefix}_*"
-        f"{EXPORT_CONFIG.file_extension}, {format_description}"
+        f"Имена:          {export_config.filename_prefix}_*"
+        f"{export_config.file_extension}, {format_description}"
     )
-    correction_description = ENHANCER_CONFIG.mode.value
-    if ENHANCER_CONFIG.mode is EnhancementMode.SOFT:
-        correction_description += f", интенсивность {ENHANCER_CONFIG.intensity:.0%}"
+    orientation_description = (
+        "портретные поворачиваются в альбомные"
+        if cropper_config.rotate_portrait_to_landscape
+        else "положение бумажной фотографии сохраняется"
+    )
+    print(f"Ориентация:     {orientation_description}")
+    correction_description = enhancer_config.mode.value
+    if enhancer_config.mode is EnhancementMode.SOFT:
+        correction_description += f", интенсивность {enhancer_config.intensity:.0%}"
     print(f"Коррекция:      {correction_description}")
     print()
 
     summary = AlbumProcessor(
-        CONFIG,
-        EXPORT_CONFIG,
-        enhancer_config=ENHANCER_CONFIG,
+        detector_config,
+        export_config,
+        cropper_config=cropper_config,
+        enhancer_config=enhancer_config,
     ).process()
     if not summary.files:
         print("Во входной папке нет поддерживаемых изображений.")

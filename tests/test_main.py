@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+import main as main_module
 from album_processor.detector import (
     ContourRejectionReason,
     DetectionWarning,
@@ -9,6 +10,7 @@ from album_processor.detector import (
 )
 from album_processor.processor import RejectionCount, SourceProcessingReport
 from main import _print_source_report
+from settings import SettingsError
 
 
 def test_console_report_explains_rejections_and_warnings(
@@ -47,3 +49,20 @@ def test_console_report_explains_rejections_and_warnings(
     assert "прямоугольность 0.620" in output
     assert "ПРЕДУПРЕЖДЕНИЕ — неоднозначный фон" in output
     assert "освободите края кадра" in output
+
+
+def test_console_reports_settings_error_without_starting_processing(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail_loading() -> None:
+        raise SettingsError("синтетическая ошибка параметра")
+
+    monkeypatch.setattr(main_module, "load_settings", fail_loading)
+
+    exit_code = main_module.main()
+    output = capsys.readouterr().out
+
+    assert exit_code == 2
+    assert "CopyPhoto: ошибка настроек" in output
+    assert "синтетическая ошибка параметра" in output
