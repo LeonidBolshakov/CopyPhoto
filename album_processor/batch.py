@@ -1,3 +1,5 @@
+"""Совместимый функциональный интерфейс пакетной обработки CopyPhoto."""
+
 from __future__ import annotations
 
 from album_processor.config import (

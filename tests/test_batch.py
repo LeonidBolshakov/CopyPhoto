@@ -1,3 +1,5 @@
+"""Интеграционные тесты AlbumProcessor и совместимого пакетного интерфейса."""
+
 from pathlib import Path
 
 import cv2

@@ -1,3 +1,5 @@
+"""Обнаружение бумажных фотографий и формирование диагностики контуров."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,6 +14,8 @@ from album_processor.config import DetectorConfig
 
 @dataclass(frozen=True, slots=True)
 class PhotoDetection:
+    """Нормализованная геометрия одной принятой фотографии."""
+
     normalized_box: np.ndarray
     angle: float
     area_fraction: float
@@ -19,11 +23,14 @@ class PhotoDetection:
     aspect_ratio: float
 
     def box_for_size(self, width: int, height: int) -> np.ndarray:
+        """Пересчитать нормализованную рамку для заданного разрешения."""
         scale = np.asarray((width, height), dtype=np.float32)
         return (self.normalized_box * scale).astype(np.float32)
 
 
 class ContourRejectionReason(Enum):
+    """Причины, по которым контур не считается фотографией."""
+
     AREA_TOO_SMALL = "площадь меньше допустимой"
     AREA_TOO_LARGE = "площадь больше допустимой"
     INVALID_RECTANGLE = "невозможно построить прямоугольную рамку"
@@ -35,16 +42,21 @@ class ContourRejectionReason(Enum):
 
 @dataclass(frozen=True, slots=True)
 class ContourRejection:
+    """Отклонённый контур с причиной и измеренными показателями."""
+
     reason: ContourRejectionReason
     normalized_contour: np.ndarray
     details: str
 
     def contour_for_size(self, width: int, height: int) -> np.ndarray:
+        """Пересчитать нормализованный контур для заданного разрешения."""
         scale = np.asarray((width, height), dtype=np.float32)
         return (self.normalized_contour * scale).astype(np.float32)
 
 
 class DetectionWarningCode(Enum):
+    """Категории диагностических предупреждений детектора."""
+
     LOW_BACKGROUND_COVERAGE = "неоднозначный фон"
     HIGH_BACKGROUND_THRESHOLD = "неоднородный фон"
     NO_PHOTOS = "фотографии не найдены"
@@ -52,17 +64,22 @@ class DetectionWarningCode(Enum):
 
 @dataclass(frozen=True, slots=True)
 class DetectionWarning:
+    """Предупреждение с объяснением и рекомендацией оператору."""
+
     code: DetectionWarningCode
     message: str
     recommendation: str
 
     @property
     def text(self) -> str:
+        """Объединить сообщение и рекомендацию для консольного вывода."""
         return f"{self.message}. {self.recommendation}"
 
 
 @dataclass(frozen=True, slots=True)
 class DetectionResult:
+    """Полный результат обнаружения вместе с диагностическими данными."""
+
     detections: tuple[PhotoDetection, ...]
     rejections: tuple[ContourRejection, ...]
     warnings: tuple[DetectionWarning, ...]
@@ -75,6 +92,7 @@ class DetectionResult:
 
     @property
     def background_warning(self) -> str | None:
+        """Вернуть совместимый текст предупреждений об оценке фона."""
         background_warnings = tuple(
             warning.text
             for warning in self.warnings
@@ -89,6 +107,8 @@ class DetectionResult:
 
 @dataclass(frozen=True, slots=True)
 class _BackgroundEstimate:
+    """Внутренняя оценка цвета и надёжности однотонной подложки."""
+
     raw_mask: np.ndarray
     color_lab: np.ndarray
     distance_threshold: float
@@ -97,6 +117,7 @@ class _BackgroundEstimate:
 
 
 def _resize_for_analysis(image: np.ndarray, max_side: int) -> np.ndarray:
+    """Создать уменьшенную копию для быстрого анализа контуров."""
     height, width = image.shape[:2]
     scale = min(1.0, max_side / max(height, width))
     if scale == 1.0:
@@ -110,6 +131,7 @@ def _border_tiles(
     fraction: float,
     tiles_per_side: int,
 ) -> tuple[np.ndarray, ...]:
+    """Разбить периметр кадра на участки для оценки подложки."""
     height, width = image.shape[:2]
     border = min(min(height, width), max(1, round(min(height, width) * fraction)))
     horizontal_edges = np.linspace(0, width, tiles_per_side + 1, dtype=int)
@@ -129,6 +151,7 @@ def _border_tiles(
 
 
 def _tile_statistics(tile: np.ndarray) -> tuple[np.ndarray, float, np.ndarray]:
+    """Вычислить медианный цвет, разброс и пиксели участка периметра."""
     pixels = tile.reshape(-1, 3)
     median = np.median(pixels, axis=0).astype(np.float32)
     distances = np.linalg.norm(pixels - median, axis=1)
@@ -140,6 +163,7 @@ def _dominant_background_pixels(
     lab: np.ndarray,
     config: DetectorConfig,
 ) -> tuple[np.ndarray, float]:
+    """Выбрать доминирующую цветовую группу однородных участков фона."""
     tiles = _border_tiles(
         lab,
         config.background_border_fraction,
@@ -176,6 +200,7 @@ def _refine_background(
     pixels: np.ndarray,
     config: DetectorConfig,
 ) -> np.ndarray:
+    """Итеративно уточнить цвет фона, отбрасывая цветовые выбросы."""
     background = np.median(pixels, axis=0).astype(np.float32)
     for _ in range(config.background_refinement_iterations):
         distances = np.linalg.norm(pixels - background, axis=1)
@@ -188,6 +213,7 @@ def _refine_background(
 def _background_mask(
     preview: np.ndarray, config: DetectorConfig
 ) -> _BackgroundEstimate:
+    """Построить черновую маску переднего плана и оценить качество фона."""
     lab = cv2.cvtColor(preview, cv2.COLOR_BGR2LAB).astype(np.float32)
     background_pixels, coverage = _dominant_background_pixels(lab, config)
     background = _refine_background(background_pixels, config)
@@ -241,6 +267,7 @@ def _background_mask(
 
 
 def _clean_mask(mask: np.ndarray, config: DetectorConfig) -> np.ndarray:
+    """Закрыть разрывы и удалить мелкий шум морфологическими операциями."""
     height, width = mask.shape
     kernel_size = max(3, round(min(height, width) * config.morph_kernel_fraction))
     if kernel_size % 2 == 0:
@@ -252,6 +279,7 @@ def _clean_mask(mask: np.ndarray, config: DetectorConfig) -> np.ndarray:
 
 
 def _nearest_axis_angle(box: np.ndarray) -> float:
+    """Вычислить отклонение длинного края от ближайшей оси кадра."""
     edges = np.roll(box, -1, axis=0) - box
     lengths = np.linalg.norm(edges, axis=1)
     longest = edges[int(np.argmax(lengths))]
@@ -266,6 +294,7 @@ def _rejection(
     reason: ContourRejectionReason,
     details: str,
 ) -> ContourRejection:
+    """Создать диагностическое отклонение с нормализованным контуром."""
     scale = np.asarray((width, height), dtype=np.float32)
     normalized_contour = contour.astype(np.float32) / scale
     return ContourRejection(
@@ -281,6 +310,7 @@ def _evaluate_contour(
     height: int,
     config: DetectorConfig,
 ) -> tuple[PhotoDetection | None, ContourRejection | None]:
+    """Проверить геометрию контура и вернуть принятие либо первую причину отказа."""
     image_area = float(width * height)
     contour_area = float(cv2.contourArea(contour))
     area_fraction = contour_area / image_area
@@ -390,6 +420,7 @@ def _annotate(
     rejections: tuple[ContourRejection, ...],
     warnings: tuple[DetectionWarning, ...],
 ) -> np.ndarray:
+    """Нарисовать принятые и отклонённые контуры и состояние предупреждений."""
     annotated = preview.copy()
     height, width = annotated.shape[:2]
     for rejection in rejections:
@@ -446,6 +477,7 @@ def _annotate(
 
 
 def detect_photos(image: np.ndarray, config: DetectorConfig) -> DetectionResult:
+    """Найти фотографии на однотонной подложке в уменьшенной копии изображения."""
     if image.ndim != 3 or image.shape[2] != 3:
         raise ValueError("detect_photos ожидает трёхканальное изображение BGR")
 

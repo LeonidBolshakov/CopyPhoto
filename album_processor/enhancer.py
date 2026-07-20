@@ -1,3 +1,5 @@
+"""Первичная коррекция яркостного контраста вырезанных фотографий."""
+
 from __future__ import annotations
 
 import cv2
@@ -11,6 +13,7 @@ from album_processor.config import (
 
 
 def _validate_image(image: np.ndarray) -> None:
+    """Проверить технические требования к изображению для коррекции."""
     if image.ndim != 3 or image.shape[2] != 3:
         raise ValueError("enhance_photo ожидает трёхканальное изображение BGR")
     if image.shape[0] == 0 or image.shape[1] == 0:
@@ -20,6 +23,7 @@ def _validate_image(image: np.ndarray) -> None:
 
 
 def _soft_enhancement(image: np.ndarray, config: EnhancerConfig) -> np.ndarray:
+    """Мягко смешать исходную яркость с результатом локального CLAHE."""
     if config.intensity == 0:
         return np.ascontiguousarray(image.copy())
 

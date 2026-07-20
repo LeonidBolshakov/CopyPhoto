@@ -1,3 +1,5 @@
+"""Тесты формирования имён и продолжения нумерации результатов."""
+
 from pathlib import Path
 
 import pytest

@@ -1,3 +1,5 @@
+"""Координация пакетной обработки и структурированные отчёты CopyPhoto."""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -30,6 +32,8 @@ from album_processor.naming import find_next_output_index, output_path
 
 @dataclass(frozen=True, slots=True)
 class RejectionCount:
+    """Количество отклонённых контуров одной категории с примером."""
+
     reason: ContourRejectionReason
     count: int
     example: str
@@ -37,6 +41,8 @@ class RejectionCount:
 
 @dataclass(frozen=True, slots=True)
 class SourceProcessingReport:
+    """Компактный отчёт обработки одного исходного файла."""
+
     source: Path
     processed: bool
     detected_photos: int
@@ -50,11 +56,14 @@ class SourceProcessingReport:
 
     @property
     def saved_photos(self) -> int:
+        """Вернуть число успешно записанных фотографий."""
         return len(self.saved_paths)
 
 
 @dataclass(frozen=True, slots=True)
 class BatchSummary:
+    """Итоговые счётчики и файловые отчёты пакетного запуска."""
+
     total_files: int
     processed: int
     files_with_errors: int
@@ -68,6 +77,7 @@ class BatchSummary:
 def _summarize_rejections(
     rejections: tuple[ContourRejection, ...],
 ) -> tuple[RejectionCount, ...]:
+    """Сгруппировать отклонённые контуры по первой причине отказа."""
     counts = Counter(item.reason for item in rejections)
     return tuple(
         RejectionCount(
@@ -93,6 +103,7 @@ class AlbumProcessor:
         enhancer_config: EnhancerConfig = DEFAULT_ENHANCER_CONFIG,
         diagnostics_config: DiagnosticsConfig | None = None,
     ) -> None:
+        """Сохранить конфигурации независимых этапов пакетного конвейера."""
         self.detector_config = detector_config
         self.export_config = export_config
         self.cropper_config = cropper_config
@@ -100,6 +111,7 @@ class AlbumProcessor:
         self.diagnostics_config = diagnostics_config
 
     def process(self) -> BatchSummary:
+        """Обработать входной каталог и вернуть полный отчёт без печати в консоль."""
         self._prepare_directories()
         sources = tuple(iter_source_images(self.detector_config.input_dir))
         next_index = find_next_output_index(self.export_config)
@@ -127,6 +139,7 @@ class AlbumProcessor:
         )
 
     def _prepare_directories(self) -> None:
+        """Создать обязательные каталоги и отладочный каталог при необходимости."""
         self.detector_config.input_dir.mkdir(parents=True, exist_ok=True)
         self.export_config.output_dir.mkdir(parents=True, exist_ok=True)
         if (
@@ -140,6 +153,7 @@ class AlbumProcessor:
         source: Path,
         next_index: int,
     ) -> tuple[SourceProcessingReport, int]:
+        """Обработать один источник, изолируя его ошибки от остальных файлов."""
         try:
             image = read_image(source)
             result = detect_photos(image, self.detector_config)
@@ -219,6 +233,7 @@ class AlbumProcessor:
         result: DetectionResult,
         output_dir: Path,
     ) -> None:
+        """Записать изображение контуров и бинарную маску детектора."""
         write_image(
             output_dir / f"{source.stem}_detected.jpg",
             result.annotated,
@@ -233,6 +248,7 @@ class AlbumProcessor:
         image: np.ndarray,
         start_index: int,
     ) -> tuple[Path, int]:
+        """Записать фотографию под первым свободным последовательным номером."""
         index = start_index
         while True:
             target = output_path(self.export_config, index)

@@ -1,3 +1,5 @@
+"""Полноразмерное выделение и геометрическое выравнивание фотографий."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -11,6 +13,7 @@ from album_processor.detector import PhotoDetection
 
 
 def _validate_image(image: np.ndarray) -> None:
+    """Проверить форму и непустой размер входного BGR-изображения."""
     if image.ndim != 3 or image.shape[2] != 3:
         raise ValueError("crop_photo ожидает трёхканальное изображение BGR")
     if image.shape[0] == 0 or image.shape[1] == 0:
@@ -22,6 +25,7 @@ def _source_patch(
     box: np.ndarray,
     margin: int,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Извлечь участок с запасом и перевести рамку в локальные координаты."""
     height, width = image.shape[:2]
     left = floor(float(np.min(box[:, 0]))) - margin
     top = floor(float(np.min(box[:, 1]))) - margin
@@ -55,6 +59,7 @@ def _affine_crop(
     background_lab: np.ndarray,
     config: CropperConfig,
 ) -> np.ndarray:
+    """Исправить небольшой наклон аффинным поворотом и вырезать рамку."""
     center = box.mean(axis=0)
     rotation = cv2.getRotationMatrix2D(
         (float(center[0]), float(center[1])),
@@ -87,6 +92,7 @@ def _photo_quad(
     background_lab: np.ndarray,
     config: CropperConfig,
 ) -> np.ndarray | None:
+    """Уточнить четыре угла бумажной фотографии по цвету подложки."""
     lab = cv2.cvtColor(patch, cv2.COLOR_BGR2LAB).astype(np.float32)
     distances = np.linalg.norm(lab - background_lab, axis=2)
     mask: np.ndarray = np.where(
@@ -140,6 +146,7 @@ def _photo_quad(
 
 
 def _order_quad(quad: np.ndarray) -> np.ndarray:
+    """Упорядочить углы как левый верхний, правый верхний и далее по часовой."""
     coordinate_sum = quad.sum(axis=1)
     coordinate_difference = quad[:, 0] - quad[:, 1]
     ordered = np.asarray(
@@ -157,6 +164,7 @@ def _order_quad(quad: np.ndarray) -> np.ndarray:
 
 
 def _inset_quad(quad: np.ndarray, inset: float) -> np.ndarray:
+    """Сместить углы внутрь для удаления узкой тени или полосы подложки."""
     if inset == 0:
         return quad
     center = quad.mean(axis=0)
@@ -173,6 +181,7 @@ def _perspective_crop(
     background_lab: np.ndarray,
     config: CropperConfig,
 ) -> np.ndarray:
+    """Выровнять перспективу четырёхугольной бумажной фотографии."""
     ordered_quad = _order_quad(quad)
     inset_quad = _inset_quad(ordered_quad, config.perspective_inset_pixels)
     top_left, top_right, bottom_right, bottom_left = inset_quad
@@ -210,6 +219,7 @@ def _perspective_crop(
 
 
 def _is_axis_aligned_quad(quad: np.ndarray, max_edge_offset: float) -> bool:
+    """Проверить возможность прямого среза без интерполяции пикселей."""
     top_left, top_right, bottom_right, bottom_left = quad
     edge_offsets = (
         abs(float(top_right[1] - top_left[1])),
@@ -226,6 +236,7 @@ def _axis_aligned_crop(
     background_lab: np.ndarray,
     config: CropperConfig,
 ) -> np.ndarray:
+    """Вырезать почти осевую фотографию обычным срезом NumPy."""
     inset_quad = _inset_quad(ordered_quad, config.perspective_inset_pixels)
     top_left, top_right, bottom_right, bottom_left = inset_quad
     left = max(0, ceil(max(float(top_left[0]), float(bottom_left[0]))))
@@ -246,12 +257,14 @@ def _axis_aligned_crop(
 
 
 def _normalize_orientation(image: np.ndarray, config: CropperConfig) -> np.ndarray:
+    """При необходимости повернуть портретный результат в альбомное положение."""
     if config.rotate_portrait_to_landscape and image.shape[0] > image.shape[1]:
         return np.ascontiguousarray(cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE))
     return image
 
 
 def _estimate_background_lab(patch: np.ndarray, box: np.ndarray) -> np.ndarray:
+    """Оценить медианный цвет подложки за пределами рамки в LAB."""
     inside = np.zeros(patch.shape[:2], dtype=np.uint8)
     polygon = np.rint(box).astype(np.int32)
     cv2.fillConvexPoly(inside, polygon, 255)
@@ -272,6 +285,7 @@ def _background_depth(
     *,
     reverse: bool = False,
 ) -> int:
+    """Посчитать число последовательных строк или столбцов подложки от края."""
     values = scores[::-1] if reverse else scores
     depth = 0
     for score in values[:limit]:
@@ -286,6 +300,7 @@ def _trim_substrate(
     background_lab: np.ndarray,
     config: CropperConfig,
 ) -> np.ndarray:
+    """Удалить остаточные полосы подложки вдоль краёв выровненного кадра."""
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB).astype(np.float32)
     distances = np.linalg.norm(lab - background_lab, axis=2)
     background_like = distances <= config.substrate_color_distance

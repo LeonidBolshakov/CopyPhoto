@@ -1,3 +1,5 @@
+"""Консольная точка входа CopyPhoto и форматирование отчётов обработки."""
+
 from album_processor.config import EnhancementMode
 from album_processor.processor import (
     AlbumProcessor,
@@ -8,6 +10,7 @@ from settings import SETTINGS_PATH, SettingsError, load_settings
 
 
 def _print_source_report(report: SourceProcessingReport) -> None:
+    """Вывести результат обработки одного исходного изображения."""
     if not report.processed:
         print(f"{report.source.name}: обработать не удалось")
     else:
@@ -43,6 +46,7 @@ def _print_source_report(report: SourceProcessingReport) -> None:
 
 
 def _print_summary(summary: BatchSummary) -> None:
+    """Вывести итоговую статистику пакетной обработки."""
     print()
     print("Итоговая статистика")
     print(f"Входных файлов: {summary.total_files}")
@@ -55,6 +59,7 @@ def _print_summary(summary: BatchSummary) -> None:
 
 
 def main() -> int:
+    """Загрузить настройки, выполнить обработку и вернуть код завершения."""
     try:
         application_settings = load_settings()
     except SettingsError as error:

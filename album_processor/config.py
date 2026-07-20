@@ -1,3 +1,5 @@
+"""Типизированные конфигурации и консервативные значения по умолчанию."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,6 +9,8 @@ from pathlib import Path
 
 @dataclass(frozen=True, slots=True)
 class CropperConfig:
+    """Параметры полноразмерного кадрирования и геометрического выравнивания."""
+
     # Запас защищает край фотографии при интерполяции во время поворота.
     safety_margin_pixels: int = 32
 
@@ -26,6 +30,7 @@ class CropperConfig:
     rotate_portrait_to_landscape: bool = True
 
     def __post_init__(self) -> None:
+        """Проверить допустимость параметров кадрирования."""
         if self.safety_margin_pixels < 0:
             raise ValueError("safety_margin_pixels не может быть отрицательным")
         if self.substrate_trim_pixels < 0:
@@ -46,12 +51,16 @@ DEFAULT_CROPPER_CONFIG = CropperConfig()
 
 
 class EnhancementMode(Enum):
+    """Доступные оператору режимы первичной коррекции."""
+
     NONE = "Без коррекции"
     SOFT = "Мягкая"
 
 
 @dataclass(frozen=True, slots=True)
 class EnhancerConfig:
+    """Режим и параметры первичной коррекции готового кадра."""
+
     mode: EnhancementMode = EnhancementMode.NONE
 
     # Доля скорректированной яркости в итоговом изображении.
@@ -62,6 +71,7 @@ class EnhancerConfig:
     clahe_tile_grid_size: int = 8
 
     def __post_init__(self) -> None:
+        """Проверить режим и числовые параметры первичной коррекции."""
         if not isinstance(self.mode, EnhancementMode):
             raise ValueError("задан неизвестный режим коррекции")
         if not 0.0 <= self.intensity <= 1.0:
@@ -79,16 +89,21 @@ DEFAULT_ENHANCER_CONFIG = EnhancerConfig()
 
 @dataclass(frozen=True, slots=True)
 class DiagnosticsConfig:
+    """Настройки записи диагностических изображений."""
+
     output_dir: Path
     enabled: bool = True
 
     def __post_init__(self) -> None:
+        """Проверить тип переключателя диагностического режима."""
         if not isinstance(self.enabled, bool):
             raise ValueError("признак режима отладки должен иметь значение Да или Нет")
 
 
 @dataclass(frozen=True, slots=True)
 class ExportConfig:
+    """Параметры каталога, имён и формата экспортируемых фотографий."""
+
     output_dir: Path
     filename_prefix: str = "photo"
     filename_digits: int = 4
@@ -96,6 +111,7 @@ class ExportConfig:
     jpeg_quality: int = 95
 
     def __post_init__(self) -> None:
+        """Проверить параметры имени, формата и качества экспорта."""
         if not self.filename_prefix or self.filename_prefix.strip() != self.filename_prefix:
             raise ValueError("префикс имени файла не может быть пустым или содержать пробелы по краям")
         forbidden = frozenset('<>:"/\\|?*')
@@ -112,11 +128,14 @@ class ExportConfig:
 
     @property
     def file_extension(self) -> str:
+        """Вернуть расширение, соответствующее выбранному формату."""
         return ".jpg" if self.output_format == "jpeg" else ".png"
 
 
 @dataclass(frozen=True, slots=True)
 class DetectorConfig:
+    """Пути источников и внутренние пороги обнаружения фотографий."""
+
     input_dir: Path
 
     # Уменьшенная копия используется только для быстрого поиска контуров.
@@ -151,6 +170,7 @@ class DetectorConfig:
     max_deskew_angle: float = 15.0
 
     def __post_init__(self) -> None:
+        """Проверить внутренние пороги и диапазоны детектора."""
         if self.analysis_max_side < 320:
             raise ValueError("analysis_max_side должен быть не меньше 320")
         if self.background_tiles_per_side < 2:

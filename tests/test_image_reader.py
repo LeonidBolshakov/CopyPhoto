@@ -1,3 +1,5 @@
+"""Тесты чтения форматов, EXIF-ориентации и безопасной записи изображений."""
+
 from pathlib import Path
 
 import numpy as np

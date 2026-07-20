@@ -1,3 +1,5 @@
+"""Формирование последовательных имён без перезаписи результатов."""
+
 from __future__ import annotations
 
 import re
@@ -12,6 +14,7 @@ def format_output_name(
     digits: int,
     extension: str = ".jpg",
 ) -> str:
+    """Сформировать имя результата из префикса, номера и расширения."""
     if index < 1:
         raise ValueError("номер выходного файла должен быть положительным")
     if digits < 1:
@@ -22,6 +25,7 @@ def format_output_name(
 
 
 def find_next_output_index(config: ExportConfig) -> int:
+    """Найти следующий свободный номер среди файлов выбранного формата."""
     if not config.output_dir.exists():
         return 1
     pattern = re.compile(
@@ -37,6 +41,7 @@ def find_next_output_index(config: ExportConfig) -> int:
 
 
 def output_path(config: ExportConfig, index: int) -> Path:
+    """Построить полный путь выходного файла для указанного номера."""
     return config.output_dir / format_output_name(
         config.filename_prefix,
         index,

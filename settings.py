@@ -1,3 +1,5 @@
+"""Загрузка и проверка операторских параметров из файла settings.ini."""
+
 from __future__ import annotations
 
 import configparser
@@ -24,6 +26,8 @@ class SettingsError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class ApplicationSettings:
+    """Полный набор проверенных конфигураций для запуска CopyPhoto."""
+
     detector_config: DetectorConfig
     cropper_config: CropperConfig
     enhancer_config: EnhancerConfig
@@ -36,6 +40,7 @@ def _required_value(
     section: str,
     parameter: str,
 ) -> str:
+    """Получить обязательное непустое значение параметра INI."""
     if not parser.has_section(section):
         raise SettingsError(f"отсутствует раздел [{section}]")
     if not parser.has_option(section, parameter):
@@ -55,6 +60,7 @@ def _integer_value(
     section: str,
     parameter: str,
 ) -> int:
+    """Прочитать обязательный целочисленный параметр INI."""
     value = _required_value(parser, section, parameter)
     try:
         return int(value)
@@ -69,6 +75,7 @@ def _yes_no_value(
     section: str,
     parameter: str,
 ) -> bool:
+    """Преобразовать русское значение «Да» или «Нет» в bool."""
     value = _required_value(parser, section, parameter).casefold()
     if value == "да":
         return True
@@ -85,6 +92,7 @@ def _directory_value(
     parameter: str,
     project_dir: Path,
 ) -> Path:
+    """Получить абсолютный путь, разрешая относительный от каталога проекта."""
     directory = Path(_required_value(parser, section, parameter)).expanduser()
     if not directory.is_absolute():
         directory = project_dir / directory
@@ -92,6 +100,7 @@ def _directory_value(
 
 
 def _enhancement_mode(value: str) -> EnhancementMode:
+    """Преобразовать операторское название режима коррекции во внутренний enum."""
     normalized = value.casefold()
     for mode in EnhancementMode:
         if normalized == mode.value.casefold():
@@ -104,6 +113,7 @@ def _enhancement_mode(value: str) -> EnhancementMode:
 
 
 def _read_parser(path: Path) -> configparser.ConfigParser:
+    """Прочитать INI в UTF-8 с поддержкой отдельных и встроенных комментариев."""
     if not path.is_file():
         raise SettingsError(f"не найден файл настроек: {path}")
     parser = configparser.ConfigParser(
@@ -124,6 +134,7 @@ def load_settings(
     path: Path = SETTINGS_PATH,
     project_dir: Path = PROJECT_DIR,
 ) -> ApplicationSettings:
+    """Загрузить settings.ini и построить типизированные конфигурации приложения."""
     parser = _read_parser(path)
 
     input_dir = _directory_value(

@@ -1,3 +1,5 @@
+"""Чтение исходных изображений и безопасная запись JPEG/PNG."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,6 +16,7 @@ SUPPORTED_EXTENSIONS = frozenset({".heic", ".heif", ".jpg", ".jpeg", ".png"})
 
 
 def iter_source_images(directory: Path) -> list[Path]:
+    """Вернуть поддерживаемые исходные файлы каталога в стабильном порядке."""
     if not directory.exists():
         return []
     return sorted(
