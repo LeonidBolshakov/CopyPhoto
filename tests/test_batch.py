@@ -6,7 +6,12 @@ import pytest
 
 import album_processor.processor as processor_module
 from album_processor.batch import process_input_directory
-from album_processor.config import DetectorConfig, ExportConfig
+from album_processor.config import (
+    DetectorConfig,
+    EnhancementMode,
+    EnhancerConfig,
+    ExportConfig,
+)
 from album_processor.image_reader import read_image, write_image
 from album_processor.processor import AlbumProcessor
 
@@ -149,3 +154,35 @@ def test_album_processor_returns_structured_report_without_console_output(
     assert report.saved_paths[0].name == "album_001.jpg"
     assert report.distance_threshold is not None
     assert report.background_tile_coverage is not None
+
+
+def test_album_processor_applies_configured_enhancement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    detector_config = make_detector_config(tmp_path)
+    export_config = make_export_config(tmp_path, output_format="png")
+    enhancer_config = EnhancerConfig(
+        mode=EnhancementMode.SOFT,
+        intensity=0.40,
+    )
+    make_source(detector_config.input_dir / "good.png")
+    received_configs: list[EnhancerConfig] = []
+
+    def record_enhancement(
+        image: np.ndarray,
+        config: EnhancerConfig,
+    ) -> np.ndarray:
+        received_configs.append(config)
+        return image.copy()
+
+    monkeypatch.setattr(processor_module, "enhance_photo", record_enhancement)
+
+    summary = AlbumProcessor(
+        detector_config,
+        export_config,
+        enhancer_config=enhancer_config,
+    ).process()
+
+    assert summary.saved_photos == 1
+    assert received_configs == [enhancer_config]

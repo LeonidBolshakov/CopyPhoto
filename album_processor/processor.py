@@ -8,8 +8,10 @@ import numpy as np
 
 from album_processor.config import (
     DEFAULT_CROPPER_CONFIG,
+    DEFAULT_ENHANCER_CONFIG,
     CropperConfig,
     DetectorConfig,
+    EnhancerConfig,
     ExportConfig,
 )
 from album_processor.cropper import crop_photo
@@ -20,6 +22,7 @@ from album_processor.detector import (
     DetectionWarning,
     detect_photos,
 )
+from album_processor.enhancer import enhance_photo
 from album_processor.image_reader import iter_source_images, read_image, write_image
 from album_processor.naming import find_next_output_index, output_path
 
@@ -86,10 +89,12 @@ class AlbumProcessor:
         detector_config: DetectorConfig,
         export_config: ExportConfig,
         cropper_config: CropperConfig = DEFAULT_CROPPER_CONFIG,
+        enhancer_config: EnhancerConfig = DEFAULT_ENHANCER_CONFIG,
     ) -> None:
         self.detector_config = detector_config
         self.export_config = export_config
         self.cropper_config = cropper_config
+        self.enhancer_config = enhancer_config
 
     def process(self) -> BatchSummary:
         self._prepare_directories()
@@ -165,8 +170,9 @@ class AlbumProcessor:
         for photo_number, detection in enumerate(result.detections, start=1):
             try:
                 cropped = crop_photo(image, detection, self.cropper_config)
+                enhanced = enhance_photo(cropped, self.enhancer_config)
                 target, next_index = self._save_without_overwrite(
-                    cropped,
+                    enhanced,
                     next_index,
                 )
                 saved_paths.append(target)

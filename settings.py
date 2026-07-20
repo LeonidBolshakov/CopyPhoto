@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from album_processor.config import DetectorConfig, ExportConfig
+from album_processor.config import (
+    DetectorConfig,
+    EnhancementMode,
+    EnhancerConfig,
+    ExportConfig,
+)
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -17,4 +22,8 @@ CONFIG = DetectorConfig(
 EXPORT_CONFIG = ExportConfig(
     output_dir=OUTPUT_DIR,
     output_format="png",  # Допустимые значения: "jpeg" и "png".
+)
+
+ENHANCER_CONFIG = EnhancerConfig(
+    mode=EnhancementMode.NONE,  # NONE — без коррекции, SOFT — мягкая.
 )

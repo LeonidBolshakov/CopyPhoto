@@ -1,9 +1,10 @@
+from album_processor.config import EnhancementMode
 from album_processor.processor import (
     AlbumProcessor,
     BatchSummary,
     SourceProcessingReport,
 )
-from settings import CONFIG, EXPORT_CONFIG
+from settings import CONFIG, ENHANCER_CONFIG, EXPORT_CONFIG
 
 
 def _print_source_report(report: SourceProcessingReport) -> None:
@@ -66,9 +67,17 @@ def main() -> int:
         f"Имена:          {EXPORT_CONFIG.filename_prefix}_*"
         f"{EXPORT_CONFIG.file_extension}, {format_description}"
     )
+    correction_description = ENHANCER_CONFIG.mode.value
+    if ENHANCER_CONFIG.mode is EnhancementMode.SOFT:
+        correction_description += f", интенсивность {ENHANCER_CONFIG.intensity:.0%}"
+    print(f"Коррекция:      {correction_description}")
     print()
 
-    summary = AlbumProcessor(CONFIG, EXPORT_CONFIG).process()
+    summary = AlbumProcessor(
+        CONFIG,
+        EXPORT_CONFIG,
+        enhancer_config=ENHANCER_CONFIG,
+    ).process()
     if not summary.files:
         print("Во входной папке нет поддерживаемых изображений.")
     for report in summary.files:

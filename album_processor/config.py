@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 
@@ -42,6 +43,38 @@ class CropperConfig:
 
 
 DEFAULT_CROPPER_CONFIG = CropperConfig()
+
+
+class EnhancementMode(Enum):
+    NONE = "Без коррекции"
+    SOFT = "Мягкая"
+
+
+@dataclass(frozen=True, slots=True)
+class EnhancerConfig:
+    mode: EnhancementMode = EnhancementMode.NONE
+
+    # Доля скорректированной яркости в итоговом изображении.
+    intensity: float = 0.25
+
+    # Параметры локального выравнивания яркости для мягкого режима.
+    clahe_clip_limit: float = 2.0
+    clahe_tile_grid_size: int = 8
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.mode, EnhancementMode):
+            raise ValueError("задан неизвестный режим коррекции")
+        if not 0.0 <= self.intensity <= 1.0:
+            raise ValueError(
+                "интенсивность коррекции должна находиться в диапазоне [0, 1]"
+            )
+        if self.clahe_clip_limit <= 0:
+            raise ValueError("ограничение локального контраста должно быть положительным")
+        if self.clahe_tile_grid_size < 2:
+            raise ValueError("размер сетки локальной коррекции должен быть не меньше 2")
+
+
+DEFAULT_ENHANCER_CONFIG = EnhancerConfig()
 
 
 @dataclass(frozen=True, slots=True)
