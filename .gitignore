@@ -7,3 +7,5 @@ input/*
 !input/.gitkeep
 debug/*
 !debug/.gitkeep
+output/*
+!output/.gitkeep

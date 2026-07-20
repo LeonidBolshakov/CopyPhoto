@@ -5,6 +5,74 @@ from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
+class CropperConfig:
+    # Запас защищает край фотографии при интерполяции во время поворота.
+    safety_margin_pixels: int = 32
+
+    # Максимальная ширина остаточной полосы подложки после выравнивания.
+    substrate_trim_pixels: int = 24
+    substrate_color_distance: float = 32.0
+    substrate_line_fraction: float = 0.75
+
+    # Небольшой отступ внутрь убирает тени у углов бумажной фотографии.
+    perspective_inset_pixels: float = 6.0
+
+    # Для почти осевого прямоугольника обычный срез сохраняет исходные пиксели.
+    # Порог задаёт допустимое смещение концов одного края в полном разрешении.
+    perspective_bypass_max_edge_offset_pixels: float = 2.0
+
+    # Альбомные отпечатки приводятся к горизонтальному положению.
+    rotate_portrait_to_landscape: bool = True
+
+    def __post_init__(self) -> None:
+        if self.safety_margin_pixels < 0:
+            raise ValueError("safety_margin_pixels не может быть отрицательным")
+        if self.substrate_trim_pixels < 0:
+            raise ValueError("substrate_trim_pixels не может быть отрицательным")
+        if self.substrate_color_distance <= 0:
+            raise ValueError("substrate_color_distance должен быть положительным")
+        if not 0 < self.substrate_line_fraction <= 1:
+            raise ValueError("substrate_line_fraction должен находиться в диапазоне (0, 1]")
+        if self.perspective_inset_pixels < 0:
+            raise ValueError("perspective_inset_pixels не может быть отрицательным")
+        if self.perspective_bypass_max_edge_offset_pixels < 0:
+            raise ValueError(
+                "perspective_bypass_max_edge_offset_pixels не может быть отрицательным"
+            )
+
+
+DEFAULT_CROPPER_CONFIG = CropperConfig()
+
+
+@dataclass(frozen=True, slots=True)
+class ExportConfig:
+    output_dir: Path
+    filename_prefix: str = "photo"
+    filename_digits: int = 4
+    output_format: str = "jpeg"
+    jpeg_quality: int = 95
+
+    def __post_init__(self) -> None:
+        if not self.filename_prefix or self.filename_prefix.strip() != self.filename_prefix:
+            raise ValueError("префикс имени файла не может быть пустым или содержать пробелы по краям")
+        forbidden = frozenset('<>:"/\\|?*')
+        if any(character in forbidden for character in self.filename_prefix):
+            raise ValueError("префикс имени файла содержит недопустимые символы")
+        if self.filename_prefix.endswith((".", " ")):
+            raise ValueError("префикс имени файла не может оканчиваться точкой или пробелом")
+        if self.filename_digits < 1:
+            raise ValueError("число разрядов в имени файла должно быть положительным")
+        if self.output_format not in {"jpeg", "png"}:
+            raise ValueError("формат результата должен быть 'jpeg' или 'png'")
+        if not 1 <= self.jpeg_quality <= 100:
+            raise ValueError("качество JPEG должно находиться в диапазоне [1, 100]")
+
+    @property
+    def file_extension(self) -> str:
+        return ".jpg" if self.output_format == "jpeg" else ".png"
+
+
+@dataclass(frozen=True, slots=True)
 class DetectorConfig:
     input_dir: Path
     debug_dir: Path

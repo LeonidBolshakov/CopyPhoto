@@ -31,7 +31,13 @@ def read_image(path: Path) -> np.ndarray:
     return cv2.cvtColor(pixels, cv2.COLOR_RGB2BGR)
 
 
-def write_image(path: Path, image: np.ndarray, jpeg_quality: int = 92) -> None:
+def write_image(
+    path: Path,
+    image: np.ndarray,
+    jpeg_quality: int = 92,
+    *,
+    overwrite: bool = True,
+) -> None:
     """Записать изображение через imencode с поддержкой кириллицы в пути Windows."""
     path.parent.mkdir(parents=True, exist_ok=True)
     extension = path.suffix.lower()
@@ -41,4 +47,6 @@ def write_image(path: Path, image: np.ndarray, jpeg_quality: int = 92) -> None:
     success, encoded = cv2.imencode(extension, image, parameters)
     if not success:
         raise OSError(f"OpenCV не смог закодировать файл {path.name}")
-    encoded.tofile(path)
+    mode = "wb" if overwrite else "xb"
+    with path.open(mode) as stream:
+        stream.write(encoded.tobytes())
