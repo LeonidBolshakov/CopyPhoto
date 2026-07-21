@@ -92,7 +92,7 @@ class DetectionResult:
 
     @property
     def background_warning(self) -> str | None:
-        """Вернуть совместимый текст предупреждений об оценке фона."""
+        """Вернуть предупреждения об оценке фона одной строкой или None."""
         background_warnings = tuple(
             warning.text
             for warning in self.warnings
@@ -114,6 +114,22 @@ class _BackgroundEstimate:
     distance_threshold: float
     tile_coverage: float
     warnings: tuple[DetectionWarning, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _ContourGeometry:
+    """Вычисленные показатели контура для последовательных проверок."""
+
+    contour: np.ndarray
+    width: int
+    height: int
+    area_fraction: float
+    rect_width: float
+    rect_height: float
+    rectangularity: float
+    aspect_ratio: float
+    box: np.ndarray
+    angle: float
 
 
 def _resize_for_analysis(image: np.ndarray, max_side: int) -> np.ndarray:
@@ -210,27 +226,28 @@ def _refine_background(
     return background
 
 
-def _background_mask(
-    preview: np.ndarray, config: DetectorConfig
-) -> _BackgroundEstimate:
-    """Построить черновую маску переднего плана и оценить качество фона."""
-    lab = cv2.cvtColor(preview, cv2.COLOR_BGR2LAB).astype(np.float32)
-    background_pixels, coverage = _dominant_background_pixels(lab, config)
-    background = _refine_background(background_pixels, config)
-
-    # Уточнённый центр не учитывает выбросы, а порог сохраняет естественный
-    # градиент освещения на всех выбранных участках фона.
+def _background_distance_threshold(
+    background_pixels: np.ndarray,
+    background: np.ndarray,
+    config: DetectorConfig,
+) -> float:
+    """Рассчитать порог отделения фотографии от уточнённого цвета фона."""
     background_distance = np.linalg.norm(background_pixels - background, axis=1)
     median_distance = float(np.median(background_distance))
     mad = float(np.median(np.abs(background_distance - median_distance)))
     robust_sigma = 1.4826 * mad
-    threshold = max(
+    return max(
         config.background_distance_min,
         median_distance + config.background_mad_multiplier * robust_sigma,
     )
 
-    distance = np.linalg.norm(lab - background, axis=2)
-    foreground = np.where(distance > threshold, 255, 0).astype(np.uint8)
+
+def _background_warnings(
+    coverage: float,
+    threshold: float,
+    config: DetectorConfig,
+) -> tuple[DetectionWarning, ...]:
+    """Сформировать предупреждения о надёжности оценки цвета фона."""
     warnings: list[DetectionWarning] = []
     if coverage < config.background_min_cluster_fraction:
         warnings.append(
@@ -256,13 +273,34 @@ def _background_mask(
                 ),
             )
         )
+    return tuple(warnings)
+
+
+def _background_mask(
+    preview: np.ndarray, config: DetectorConfig
+) -> _BackgroundEstimate:
+    """Построить черновую маску переднего плана и оценить качество фона."""
+    lab = cv2.cvtColor(preview, cv2.COLOR_BGR2LAB).astype(np.float32)
+    background_pixels, coverage = _dominant_background_pixels(lab, config)
+    background = _refine_background(background_pixels, config)
+
+    # Уточнённый центр не учитывает выбросы, а порог сохраняет естественный
+    # градиент освещения на всех выбранных участках фона.
+    threshold = _background_distance_threshold(
+        background_pixels,
+        background,
+        config,
+    )
+
+    distance = np.linalg.norm(lab - background, axis=2)
+    foreground = np.where(distance > threshold, 255, 0).astype(np.uint8)
 
     return _BackgroundEstimate(
         raw_mask=foreground,
         color_lab=background,
         distance_threshold=threshold,
         tile_coverage=coverage,
-        warnings=tuple(warnings),
+        warnings=_background_warnings(coverage, threshold, config),
     )
 
 
@@ -279,7 +317,7 @@ def _clean_mask(mask: np.ndarray, config: DetectorConfig) -> np.ndarray:
 
 
 def _nearest_axis_angle(box: np.ndarray) -> float:
-    """Вычислить отклонение длинного края от ближайшей оси кадра."""
+    """Вычислить отклонение длинного края от горизонтали или вертикали."""
     edges = np.roll(box, -1, axis=0) - box
     lengths = np.linalg.norm(edges, axis=1)
     longest = edges[int(np.argmax(lengths))]
@@ -304,18 +342,18 @@ def _rejection(
     )
 
 
-def _evaluate_contour(
+def _check_contour_area(
     contour: np.ndarray,
     width: int,
     height: int,
     config: DetectorConfig,
-) -> tuple[PhotoDetection | None, ContourRejection | None]:
-    """Проверить геометрию контура и вернуть принятие либо первую причину отказа."""
+) -> tuple[float, float, ContourRejection | None]:
+    """Проверить долю площади контура и вернуть вычисленные показатели."""
     image_area = float(width * height)
     contour_area = float(cv2.contourArea(contour))
     area_fraction = contour_area / image_area
     if area_fraction < config.min_photo_area_fraction:
-        return None, _rejection(
+        return contour_area, area_fraction, _rejection(
             contour,
             width,
             height,
@@ -326,7 +364,7 @@ def _evaluate_contour(
             ),
         )
     if area_fraction > config.max_photo_area_fraction:
-        return None, _rejection(
+        return contour_area, area_fraction, _rejection(
             contour,
             width,
             height,
@@ -336,81 +374,226 @@ def _evaluate_contour(
                 f"{config.max_photo_area_fraction:.2%}"
             ),
         )
+    return contour_area, area_fraction, None
+
+
+def _check_rectangle_size(
+    contour: np.ndarray,
+    width: int,
+    height: int,
+    rect_width: float,
+    rect_height: float,
+) -> ContourRejection | None:
+    """Проверить положительный размер повёрнутой прямоугольной рамки."""
+    if rect_width > 0 and rect_height > 0:
+        return None
+    return _rejection(
+        contour,
+        width,
+        height,
+        ContourRejectionReason.INVALID_RECTANGLE,
+        "ширина или высота построенной рамки равна нулю",
+    )
+
+
+def _check_short_side(
+    geometry: _ContourGeometry,
+    config: DetectorConfig,
+) -> ContourRejection | None:
+    """Проверить долю короткой стороны рамки относительно размера кадра."""
+    side_fraction = min(geometry.rect_width, geometry.rect_height) / min(
+        geometry.width,
+        geometry.height,
+    )
+    if side_fraction >= config.min_photo_side_fraction:
+        return None
+    return _rejection(
+        geometry.contour,
+        geometry.width,
+        geometry.height,
+        ContourRejectionReason.SIDE_TOO_SHORT,
+        (
+            f"доля короткой стороны {side_fraction:.2%}, требуется не меньше "
+            f"{config.min_photo_side_fraction:.2%}"
+        ),
+    )
+
+
+def _check_rectangularity(
+    geometry: _ContourGeometry,
+    config: DetectorConfig,
+) -> ContourRejection | None:
+    """Проверить нижнюю границу прямоугольности контура."""
+    if geometry.rectangularity >= config.min_rectangularity:
+        return None
+    return _rejection(
+        geometry.contour,
+        geometry.width,
+        geometry.height,
+        ContourRejectionReason.LOW_RECTANGULARITY,
+        (
+            f"прямоугольность {geometry.rectangularity:.3f}, требуется не меньше "
+            f"{config.min_rectangularity:.3f}"
+        ),
+    )
+
+
+def _check_aspect_ratio(
+    geometry: _ContourGeometry,
+    config: DetectorConfig,
+) -> ContourRejection | None:
+    """Проверить допустимый диапазон соотношения сторон рамки."""
+    if config.min_aspect_ratio <= geometry.aspect_ratio <= config.max_aspect_ratio:
+        return None
+    return _rejection(
+        geometry.contour,
+        geometry.width,
+        geometry.height,
+        ContourRejectionReason.INVALID_ASPECT_RATIO,
+        (
+            f"соотношение сторон {geometry.aspect_ratio:.2f}, допустимый диапазон "
+            f"[{config.min_aspect_ratio:.2f}, {config.max_aspect_ratio:.2f}]"
+        ),
+    )
+
+
+def _check_angle(
+    geometry: _ContourGeometry,
+    config: DetectorConfig,
+) -> ContourRejection | None:
+    """Проверить отклонение рамки от горизонтального или вертикального направления."""
+    if abs(geometry.angle) <= config.max_deskew_angle:
+        return None
+    return _rejection(
+        geometry.contour,
+        geometry.width,
+        geometry.height,
+        ContourRejectionReason.ANGLE_TOO_LARGE,
+        (
+            f"наклон {geometry.angle:+.1f}°, допускается не больше "
+            f"{config.max_deskew_angle:.1f}° по модулю"
+        ),
+    )
+
+
+def _measure_contour_geometry(
+    contour: np.ndarray,
+    width: int,
+    height: int,
+    config: DetectorConfig,
+) -> tuple[_ContourGeometry | None, ContourRejection | None]:
+    """Вычислить показатели контура после проверки площади и размера рамки."""
+    contour_area, area_fraction, rejection = _check_contour_area(
+        contour,
+        width,
+        height,
+        config,
+    )
+    if rejection is not None:
+        return None, rejection
 
     rectangle = cv2.minAreaRect(contour)
     rect_width, rect_height = rectangle[1]
-    if rect_width <= 0 or rect_height <= 0:
-        return None, _rejection(
-            contour,
-            width,
-            height,
-            ContourRejectionReason.INVALID_RECTANGLE,
-            "ширина или высота построенной рамки равна нулю",
-        )
-    side_fraction = min(rect_width, rect_height) / min(width, height)
-    if side_fraction < config.min_photo_side_fraction:
-        return None, _rejection(
-            contour,
-            width,
-            height,
-            ContourRejectionReason.SIDE_TOO_SHORT,
-            (
-                f"доля короткой стороны {side_fraction:.2%}, требуется не меньше "
-                f"{config.min_photo_side_fraction:.2%}"
-            ),
-        )
+    rejection = _check_rectangle_size(
+        contour,
+        width,
+        height,
+        rect_width,
+        rect_height,
+    )
+    if rejection is not None:
+        return None, rejection
 
     rectangle_area = float(rect_width * rect_height)
     rectangularity = contour_area / rectangle_area
-    if rectangularity < config.min_rectangularity:
-        return None, _rejection(
-            contour,
-            width,
-            height,
-            ContourRejectionReason.LOW_RECTANGULARITY,
-            (
-                f"прямоугольность {rectangularity:.3f}, требуется не меньше "
-                f"{config.min_rectangularity:.3f}"
-            ),
-        )
-
     aspect_ratio = max(rect_width, rect_height) / min(rect_width, rect_height)
-    if not config.min_aspect_ratio <= aspect_ratio <= config.max_aspect_ratio:
-        return None, _rejection(
-            contour,
-            width,
-            height,
-            ContourRejectionReason.INVALID_ASPECT_RATIO,
-            (
-                f"соотношение сторон {aspect_ratio:.2f}, допустимый диапазон "
-                f"[{config.min_aspect_ratio:.2f}, {config.max_aspect_ratio:.2f}]"
-            ),
-        )
-
     box = cv2.boxPoints(rectangle).astype(np.float32)
-    angle = _nearest_axis_angle(box)
-    if abs(angle) > config.max_deskew_angle:
-        return None, _rejection(
-            contour,
-            width,
-            height,
-            ContourRejectionReason.ANGLE_TOO_LARGE,
-            (
-                f"наклон {angle:+.1f}°, допускается не больше "
-                f"{config.max_deskew_angle:.1f}° по модулю"
-            ),
-        )
+    return (
+        _ContourGeometry(
+            contour=contour,
+            width=width,
+            height=height,
+            area_fraction=area_fraction,
+            rect_width=rect_width,
+            rect_height=rect_height,
+            rectangularity=rectangularity,
+            aspect_ratio=aspect_ratio,
+            box=box,
+            angle=_nearest_axis_angle(box),
+        ),
+        None,
+    )
 
-    normalized_box = box / np.asarray((width, height), dtype=np.float32)
+
+def _evaluate_contour(
+    contour: np.ndarray,
+    width: int,
+    height: int,
+    config: DetectorConfig,
+) -> tuple[PhotoDetection | None, ContourRejection | None]:
+    """Проверить геометрию контура и вернуть принятие либо первую причину отказа."""
+    geometry, rejection = _measure_contour_geometry(
+        contour,
+        width,
+        height,
+        config,
+    )
+    if rejection is not None:
+        return None, rejection
+    assert geometry is not None
+
+    checks = (
+        _check_short_side,
+        _check_rectangularity,
+        _check_aspect_ratio,
+        _check_angle,
+    )
+    for check in checks:
+        rejection = check(geometry, config)
+        if rejection is not None:
+            return None, rejection
+
+    normalized_box = geometry.box / np.asarray((width, height), dtype=np.float32)
     return (
         PhotoDetection(
             normalized_box=normalized_box,
-            angle=angle,
-            area_fraction=area_fraction,
-            rectangularity=rectangularity,
-            aspect_ratio=aspect_ratio,
+            angle=geometry.angle,
+            area_fraction=geometry.area_fraction,
+            rectangularity=geometry.rectangularity,
+            aspect_ratio=geometry.aspect_ratio,
         ),
         None,
+    )
+
+
+def _draw_outlined_text(
+    image: np.ndarray,
+    text: str,
+    origin: tuple[int, int],
+    font_scale: float,
+    color: tuple[int, int, int],
+    outline_thickness: int,
+) -> None:
+    """Нарисовать текст заданного цвета поверх чёрной обводки."""
+    cv2.putText(
+        image,
+        text,
+        origin,
+        cv2.FONT_HERSHEY_SIMPLEX,
+        font_scale,
+        (0, 0, 0),
+        outline_thickness,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        image,
+        text,
+        origin,
+        cv2.FONT_HERSHEY_SIMPLEX,
+        font_scale,
+        color,
+        2,
+        cv2.LINE_AA,
     )
 
 
@@ -429,51 +612,53 @@ def _annotate(
     for index, detection in enumerate(detections, start=1):
         box = np.rint(detection.box_for_size(width, height)).astype(np.int32)
         cv2.polylines(annotated, [box], True, (0, 220, 0), 3, cv2.LINE_AA)
-        center = tuple(np.rint(box.mean(axis=0)).astype(int))
+        center_array = np.rint(box.mean(axis=0)).astype(int)
+        center = int(center_array[0]), int(center_array[1])
         label = f"{index}: {detection.angle:+.1f}"
-        cv2.putText(
+        _draw_outlined_text(
             annotated,
             label,
             center,
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.65,
-            (0, 0, 0),
-            4,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            annotated,
-            label,
-            center,
-            cv2.FONT_HERSHEY_SIMPLEX,
             0.65,
             (0, 255, 0),
-            2,
-            cv2.LINE_AA,
+            4,
         )
     if warnings:
         cv2.rectangle(annotated, (2, 2), (width - 3, height - 3), (0, 0, 255), 8)
-        cv2.putText(
+        _draw_outlined_text(
             annotated,
             "!!!",
             (20, 42),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.85,
-            (0, 0, 0),
-            5,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            annotated,
-            "!!!",
-            (20, 42),
-            cv2.FONT_HERSHEY_SIMPLEX,
             0.85,
             (0, 0, 255),
-            2,
-            cv2.LINE_AA,
+            5,
         )
     return annotated
+
+
+def _no_photos_warning(
+    rejections: tuple[ContourRejection, ...],
+) -> DetectionWarning:
+    """Сформировать предупреждение и рекомендацию при отсутствии фотографий."""
+    if rejections:
+        reason_counts = {
+            reason: sum(item.reason is reason for item in rejections)
+            for reason in ContourRejectionReason
+        }
+        main_reason = max(reason_counts, key=reason_counts.__getitem__)
+        recommendation = (
+            f"основная причина отклонения: {main_reason.value}; "
+            "проверьте диагностическую маску и параметры детектора"
+        )
+    else:
+        recommendation = (
+            "проверьте контраст фотографий с подложкой и равномерность освещения"
+        )
+    return DetectionWarning(
+        code=DetectionWarningCode.NO_PHOTOS,
+        message="на изображении не найдено ни одной фотографии",
+        recommendation=recommendation,
+    )
 
 
 def detect_photos(image: np.ndarray, config: DetectorConfig) -> DetectionResult:
@@ -502,27 +687,7 @@ def detect_photos(image: np.ndarray, config: DetectorConfig) -> DetectionResult:
     )
     warnings = list(background.warnings)
     if not detections:
-        if rejections:
-            reason_counts = {
-                reason: sum(item.reason is reason for item in rejections)
-                for reason in ContourRejectionReason
-            }
-            main_reason = max(reason_counts, key=reason_counts.__getitem__)
-            recommendation = (
-                f"основная причина отклонения: {main_reason.value}; "
-                "проверьте диагностическую маску и параметры детектора"
-            )
-        else:
-            recommendation = (
-                "проверьте контраст фотографий с подложкой и равномерность освещения"
-            )
-        warnings.append(
-            DetectionWarning(
-                code=DetectionWarningCode.NO_PHOTOS,
-                message="на изображении не найдено ни одной фотографии",
-                recommendation=recommendation,
-            )
-        )
+        warnings.append(_no_photos_warning(rejections))
     result_warnings = tuple(warnings)
     annotated = _annotate(preview, detections, rejections, result_warnings)
 
