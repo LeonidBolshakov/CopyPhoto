@@ -141,9 +141,11 @@ def test_axis_aligned_crop_does_not_interpolate_pixels(
 
     crop = crop_photo(image, detection)
 
-    source_pixels = image.reshape(-1, 3)
-    crop_pixels = crop.reshape(-1, 3)
-    assert all(np.any(np.all(source_pixels == pixel, axis=1)) for pixel in crop_pixels)
+    source_colors = np.unique(image.reshape(-1, 3), axis=0)
+    crop_colors = np.unique(crop.reshape(-1, 3), axis=0)
+    assert all(
+        np.any(np.all(source_colors == color, axis=1)) for color in crop_colors
+    )
 
 
 def test_small_edge_offset_uses_direct_crop(monkeypatch: MonkeyPatch) -> None:
