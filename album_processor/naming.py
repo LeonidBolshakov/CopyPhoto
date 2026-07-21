@@ -32,11 +32,17 @@ def find_next_output_index(config: ExportConfig) -> int:
         rf"^{re.escape(config.filename_prefix)}_(\d+){re.escape(config.file_extension)}$",
         re.IGNORECASE,
     )
-    indices = (
-        int(match.group(1))
-        for path in config.output_dir.iterdir()
-        if path.is_file() and (match := pattern.fullmatch(path.name)) is not None
-    )
+    indices: list[int] = []
+    for path in config.output_dir.iterdir():
+        if not path.is_file():
+            continue
+
+        match = pattern.fullmatch(path.name)
+        if match is None:
+            continue
+
+        indices.append(int(match.group(1)))
+
     return max(indices, default=0) + 1
 
 
