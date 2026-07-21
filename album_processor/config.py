@@ -347,6 +347,13 @@ class DetectorConfig:
 
     def __post_init__(self) -> None:
         """Проверить внутренние пороги и диапазоны детектора."""
+        self._validate_minimum_counts()
+        self._validate_fraction_parameters()
+        self._validate_positive_parameters()
+        self._validate_related_limits()
+
+    def _validate_minimum_counts(self) -> None:
+        """Проверить минимальные размеры и количества операций детектора."""
         if self.analysis_max_side < 320:
             raise ValueError(
                 "Параметр «Максимальная сторона копии для анализа» "
@@ -364,6 +371,9 @@ class DetectorConfig:
                 "(background_refinement_iterations): значение должно быть "
                 "положительным"
             )
+
+    def _validate_fraction_parameters(self) -> None:
+        """Проверить параметры, заданные долями от нуля до единицы."""
         fraction_parameters = {
             "background_border_fraction": "Доля края для оценки фона",
             "background_inlier_fraction": "Доля значений фона для уточнения",
@@ -383,6 +393,9 @@ class DetectorConfig:
                     f"Параметр «{description}» ({name}): значение должно "
                     "быть больше 0 и меньше или равно 1"
                 )
+
+    def _validate_positive_parameters(self) -> None:
+        """Проверить параметры, для которых допустимы положительные значения."""
         positive_parameters = {
             "background_tile_mad_max": "Максимальный разброс цвета участка фона",
             "background_cluster_distance": (
@@ -400,6 +413,9 @@ class DetectorConfig:
                     f"Параметр «{description}» ({name}): значение должно быть "
                     "положительным"
                 )
+
+    def _validate_related_limits(self) -> None:
+        """Проверить взаимные границы площади, пропорций и наклона."""
         if self.min_photo_area_fraction >= self.max_photo_area_fraction:
             raise ValueError(
                 "Параметры «Минимальная доля площади фотографии» "

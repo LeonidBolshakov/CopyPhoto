@@ -79,13 +79,12 @@ def _affine_crop(
     return _trim_substrate(candidate, background_lab, config)
 
 
-def _photo_quad(
+def _photo_foreground_mask(
     patch: np.ndarray,
-    box: np.ndarray,
     background_lab: np.ndarray,
     config: CropperConfig,
-) -> np.ndarray | None:
-    """Уточнить четыре угла бумажной фотографии по цвету подложки."""
+) -> np.ndarray:
+    """Построить и очистить маску отличающихся от подложки пикселей."""
     lab = cv2.cvtColor(patch, cv2.COLOR_BGR2LAB).astype(np.float32)
     distances = np.linalg.norm(lab - background_lab, axis=2)
     mask: np.ndarray = np.where(
@@ -100,12 +99,16 @@ def _photo_quad(
         cv2.MORPH_RECT,
         (kernel_size, kernel_size),
     )
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    return cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+
+def _select_photo_contour(
+    contours: tuple[np.ndarray, ...],
+    center: np.ndarray,
+) -> np.ndarray | None:
+    """Выбрать содержащий центр или крупнейший внешний контур."""
     if not contours:
         return None
-
-    center = box.mean(axis=0)
     containing = tuple(
         contour
         for contour in contours
@@ -116,9 +119,12 @@ def _photo_quad(
         )
         >= 0
     )
-    contour = max(containing or tuple(contours), key=cv2.contourArea)
+    return max(containing or contours, key=cv2.contourArea)
+
+
+def _approximate_quadrilateral(contour: np.ndarray) -> np.ndarray | None:
+    """Найти выпуклую четырёхугольную аппроксимацию контура."""
     perimeter = cv2.arcLength(contour, True)
-    quad: np.ndarray | None = None
     for epsilon_percent in range(5, 51, 5):
         approximation = cv2.approxPolyDP(
             contour,
@@ -126,14 +132,32 @@ def _photo_quad(
             True,
         )
         if len(approximation) == 4 and cv2.isContourConvex(approximation):
-            quad = approximation.reshape(4, 2).astype(np.float32)
-            break
-    if quad is None:
-        return None
+            return approximation.reshape(4, 2).astype(np.float32)
+    return None
 
+
+def _has_plausible_quad_area(box: np.ndarray, quad: np.ndarray) -> bool:
+    """Проверить близость площади четырёхугольника к исходной рамке."""
     box_area = abs(float(cv2.contourArea(box)))
     quad_area = abs(float(cv2.contourArea(quad)))
-    if box_area <= 0 or not 0.75 <= quad_area / box_area <= 1.20:
+    return box_area > 0 and 0.75 <= quad_area / box_area <= 1.20
+
+
+def _photo_quad(
+    patch: np.ndarray,
+    box: np.ndarray,
+    background_lab: np.ndarray,
+    config: CropperConfig,
+) -> np.ndarray | None:
+    """Уточнить четыре угла бумажной фотографии по цвету подложки."""
+    mask = _photo_foreground_mask(patch, background_lab, config)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contour = _select_photo_contour(tuple(contours), box.mean(axis=0))
+    if contour is None:
+        return None
+
+    quad = _approximate_quadrilateral(contour)
+    if quad is None or not _has_plausible_quad_area(box, quad):
         return None
     return quad
 

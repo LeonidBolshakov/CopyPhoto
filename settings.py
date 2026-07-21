@@ -130,13 +130,11 @@ def _read_parser(path: Path) -> configparser.ConfigParser:
     return parser
 
 
-def load_settings(
-    path: Path = SETTINGS_PATH,
-    project_dir: Path = PROJECT_DIR,
-) -> ApplicationSettings:
-    """Загрузить settings.ini и построить проверенные конфигурации приложения."""
-    parser = _read_parser(path)
-
+def _load_directories(
+    parser: configparser.ConfigParser,
+    project_dir: Path,
+) -> tuple[Path, Path]:
+    """Загрузить входной и выходной каталоги из раздела «Каталоги»."""
     input_dir = _directory_value(
         parser,
         "Каталоги",
@@ -149,16 +147,48 @@ def load_settings(
         "Готовые фотографии",
         project_dir,
     )
+    return input_dir, output_dir
+
+
+def _load_export_config(
+    parser: configparser.ConfigParser,
+    output_dir: Path,
+) -> ExportConfig:
+    """Загрузить и проверить параметры раздела «Сохранение»."""
     output_format = _required_value(parser, "Сохранение", "Формат").casefold()
     if output_format not in {"jpg", "jpeg", "png"}:
         raise SettingsError(
             "в разделе [Сохранение] параметр «Формат» должен иметь значение "
             "jpg, jpeg или png"
         )
-    filename_prefix = _required_value(parser, "Сохранение", "Префикс имени")
-    filename_digits = _integer_value(parser, "Сохранение", "Количество цифр")
-    jpeg_quality = _integer_value(parser, "Сохранение", "Качество JPEG")
+    try:
+        return ExportConfig(
+            output_dir=output_dir,
+            filename_prefix=_required_value(
+                parser,
+                "Сохранение",
+                "Префикс имени",
+            ),
+            filename_digits=_integer_value(
+                parser,
+                "Сохранение",
+                "Количество цифр",
+            ),
+            output_format=output_format,
+            jpeg_quality=_integer_value(
+                parser,
+                "Сохранение",
+                "Качество JPEG",
+            ),
+        )
+    except ValueError as error:
+        raise SettingsError(f"ошибка раздела [Сохранение]: {error}") from error
 
+
+def _load_processing_configs(
+    parser: configparser.ConfigParser,
+) -> tuple[CropperConfig, EnhancerConfig]:
+    """Загрузить ориентацию и первичную коррекцию из раздела «Обработка»."""
     rotate_portrait = _yes_no_value(
         parser,
         "Обработка",
@@ -175,44 +205,52 @@ def load_settings(
             "в разделе [Обработка] параметр «Интенсивность коррекции» должен "
             "находиться в диапазоне от 0 до 100"
         )
+    return (
+        CropperConfig(rotate_portrait_to_landscape=rotate_portrait),
+        EnhancerConfig(
+            mode=_enhancement_mode(mode_value),
+            intensity=intensity_percent / 100.0,
+        ),
+    )
 
-    diagnostics_enabled = _yes_no_value(
+
+def _load_diagnostics_config(
+    parser: configparser.ConfigParser,
+    project_dir: Path,
+) -> DiagnosticsConfig:
+    """Загрузить переключатель и каталог из раздела «Диагностика»."""
+    enabled = _yes_no_value(
         parser,
         "Диагностика",
         "Режим отладки",
     )
-    diagnostics_dir = _directory_value(
+    output_dir = _directory_value(
         parser,
         "Диагностика",
         "Каталог",
         project_dir,
     )
+    return DiagnosticsConfig(
+        output_dir=output_dir,
+        enabled=enabled,
+    )
 
-    try:
-        export_config = ExportConfig(
-            output_dir=output_dir,
-            filename_prefix=filename_prefix,
-            filename_digits=filename_digits,
-            output_format=output_format,
-            jpeg_quality=jpeg_quality,
-        )
-    except ValueError as error:
-        raise SettingsError(f"ошибка раздела [Сохранение]: {error}") from error
+
+def load_settings(
+    path: Path = SETTINGS_PATH,
+    project_dir: Path = PROJECT_DIR,
+) -> ApplicationSettings:
+    """Загрузить settings.ini и построить проверенные конфигурации приложения."""
+    parser = _read_parser(path)
+    input_dir, output_dir = _load_directories(parser, project_dir)
+    export_config = _load_export_config(parser, output_dir)
+    cropper_config, enhancer_config = _load_processing_configs(parser)
+    diagnostics_config = _load_diagnostics_config(parser, project_dir)
 
     return ApplicationSettings(
-        detector_config=DetectorConfig(
-            input_dir=input_dir,
-        ),
-        cropper_config=CropperConfig(
-            rotate_portrait_to_landscape=rotate_portrait,
-        ),
-        enhancer_config=EnhancerConfig(
-            mode=_enhancement_mode(mode_value),
-            intensity=intensity_percent / 100.0,
-        ),
+        detector_config=DetectorConfig(input_dir=input_dir),
+        cropper_config=cropper_config,
+        enhancer_config=enhancer_config,
         export_config=export_config,
-        diagnostics_config=DiagnosticsConfig(
-            output_dir=diagnostics_dir,
-            enabled=diagnostics_enabled,
-        ),
+        diagnostics_config=diagnostics_config,
     )

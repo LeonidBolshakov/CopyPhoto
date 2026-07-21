@@ -199,6 +199,67 @@ def _rgb(color_bgr: tuple[int, int, int]) -> tuple[int, int, int]:
     return red, green, blue
 
 
+def _draw_palette_header(
+    draw: ImageDraw.ImageDraw,
+    title_font: FreeTypeFont | PillowImageFont,
+    small_font: FreeTypeFont | PillowImageFont,
+) -> None:
+    """Нарисовать название палитры и заголовки цветовых столбцов."""
+    draw.text(
+        (24, 18),
+        "Расстояния между отображаемыми цветами в OpenCV LAB",
+        fill="black",
+        font=title_font,
+    )
+    draw.text((24, 57), "Цвет подложки", fill="black", font=small_font)
+    draw.text((285, 57), "Сравниваемый цвет", fill="black", font=small_font)
+
+
+def _draw_palette_sample(
+    draw: ImageDraw.ImageDraw,
+    top: int,
+    sample: LabColorSample,
+    reference_bgr: tuple[int, int, int],
+    reference_lab: tuple[int, int, int],
+    text_font: FreeTypeFont | PillowImageFont,
+    small_font: FreeTypeFont | PillowImageFont,
+) -> None:
+    """Нарисовать одну пару цветов и сведения о расстоянии между ними."""
+    draw.rectangle(
+        (24, top, 260, top + 82),
+        fill=_rgb(reference_bgr),
+        outline="black",
+    )
+    draw.rectangle(
+        (285, top, 521, top + 82),
+        fill=_rgb(sample.bgr),
+        outline="black",
+    )
+    if sample.requested_distance is None:
+        description = "Наиболее удалённый найденный отображаемый цвет"
+    else:
+        description = f"Заданное расстояние: {sample.requested_distance:g}"
+    draw.text((550, top), description, fill="black", font=text_font)
+    draw.text(
+        (550, top + 31),
+        f"Фактическое расстояние: {sample.actual_distance:.2f}",
+        fill="black",
+        font=text_font,
+    )
+    draw.text(
+        (24, top + 94),
+        f"Подложка BGR {reference_bgr}, LAB {reference_lab}",
+        fill="black",
+        font=small_font,
+    )
+    draw.text(
+        (550, top + 66),
+        f"Цвет BGR {sample.bgr}, LAB {sample.lab}",
+        fill="black",
+        font=small_font,
+    )
+
+
 def create_lab_palette(
     output_path: Path = DEFAULT_OUTPUT_PATH,
     reference_bgr: tuple[int, int, int] = DEFAULT_REFERENCE_BGR,
@@ -215,42 +276,19 @@ def create_lab_palette(
     text_font = _load_font(19)
     small_font = _load_font(16)
 
-    reference_lab = tuple(int(value) for value in _color_to_lab(reference_bgr))
-    draw.text(
-        (24, 18),
-        "Расстояния между отображаемыми цветами в OpenCV LAB",
-        fill="black",
-        font=title_font,
-    )
-    draw.text((24, 57), "Цвет подложки", fill="black", font=small_font)
-    draw.text((285, 57), "Сравниваемый цвет", fill="black", font=small_font)
+    reference_lab = _int_triplet(_color_to_lab(reference_bgr))
+    _draw_palette_header(draw, title_font, small_font)
 
     for number, sample in enumerate(samples):
         top = header_height + number * row_height
-        draw.rectangle((24, top, 260, top + 82), fill=_rgb(reference_bgr), outline="black")
-        draw.rectangle((285, top, 521, top + 82), fill=_rgb(sample.bgr), outline="black")
-        if sample.requested_distance is None:
-            description = "Наиболее удалённый найденный отображаемый цвет"
-        else:
-            description = f"Заданное расстояние: {sample.requested_distance:g}"
-        draw.text((550, top), description, fill="black", font=text_font)
-        draw.text(
-            (550, top + 31),
-            f"Фактическое расстояние: {sample.actual_distance:.2f}",
-            fill="black",
-            font=text_font,
-        )
-        draw.text(
-            (24, top + 94),
-            f"Подложка BGR {reference_bgr}, LAB {reference_lab}",
-            fill="black",
-            font=small_font,
-        )
-        draw.text(
-            (550, top + 66),
-            f"Цвет BGR {sample.bgr}, LAB {sample.lab}",
-            fill="black",
-            font=small_font,
+        _draw_palette_sample(
+            draw,
+            top,
+            sample,
+            reference_bgr,
+            reference_lab,
+            text_font,
+            small_font,
         )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

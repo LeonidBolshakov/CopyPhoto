@@ -6,7 +6,7 @@ from album_processor.processor import (
     BatchSummary,
     SourceProcessingReport,
 )
-from settings import SETTINGS_PATH, SettingsError, load_settings
+from settings import ApplicationSettings, SETTINGS_PATH, SettingsError, load_settings
 
 
 def _print_source_report(report: SourceProcessingReport) -> None:
@@ -58,21 +58,13 @@ def _print_summary(summary: BatchSummary) -> None:
     print(f"Всего ошибок: {len(summary.errors)}")
 
 
-def main() -> int:
-    """Загрузить настройки, выполнить обработку и вернуть код завершения."""
-    try:
-        application_settings = load_settings()
-    except SettingsError as error:
-        print("CopyPhoto: ошибка настроек")
-        print(f"Файл: {SETTINGS_PATH}")
-        print(f"Причина: {error}")
-        return 2
-
-    detector_config = application_settings.detector_config
-    cropper_config = application_settings.cropper_config
-    enhancer_config = application_settings.enhancer_config
-    export_config = application_settings.export_config
-    diagnostics_config = application_settings.diagnostics_config
+def _print_application_settings(settings: ApplicationSettings) -> None:
+    """Вывести каталоги, формат и активные параметры обработки."""
+    detector_config = settings.detector_config
+    cropper_config = settings.cropper_config
+    enhancer_config = settings.enhancer_config
+    export_config = settings.export_config
+    diagnostics_config = settings.diagnostics_config
 
     print("CopyPhoto: пакетное выделение бумажных фотографий")
     print(f"Настройки:      {SETTINGS_PATH}")
@@ -102,13 +94,30 @@ def main() -> int:
     print(f"Коррекция:      {correction_description}")
     print()
 
-    summary = AlbumProcessor(
-        detector_config,
-        export_config,
-        cropper_config=cropper_config,
-        enhancer_config=enhancer_config,
-        diagnostics_config=diagnostics_config,
-    ).process()
+
+def _create_processor(settings: ApplicationSettings) -> AlbumProcessor:
+    """Создать AlbumProcessor из проверенных конфигураций приложения."""
+    return AlbumProcessor(
+        settings.detector_config,
+        settings.export_config,
+        cropper_config=settings.cropper_config,
+        enhancer_config=settings.enhancer_config,
+        diagnostics_config=settings.diagnostics_config,
+    )
+
+
+def main() -> int:
+    """Загрузить настройки, выполнить обработку и вернуть код завершения."""
+    try:
+        application_settings = load_settings()
+    except SettingsError as error:
+        print("CopyPhoto: ошибка настроек")
+        print(f"Файл: {SETTINGS_PATH}")
+        print(f"Причина: {error}")
+        return 2
+
+    _print_application_settings(application_settings)
+    summary = _create_processor(application_settings).process()
     if not summary.files:
         print("Во входной папке нет поддерживаемых изображений.")
     for report in summary.files:
