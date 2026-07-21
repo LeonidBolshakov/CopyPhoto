@@ -21,9 +21,33 @@
 
 ## Установка
 
+Для запуска исходного кода и сборки EXE требуется Windows и Python 3.14.
+Именно на этой версии разрабатывалась и проверялась программа. Проверить
+наличие Python 3.14 можно командой:
+
+```powershell
+py -3.14 --version
+```
+
+Если команда сообщает об отсутствии Python, его нужно установить, а затем
+открыть новое окно PowerShell.
+
+Скачать репозиторий, перейти в его каталог и создать отдельное виртуальное
+окружение:
+
+```powershell
+git clone https://github.com/LeonidBolshakov/CopyPhoto.git
+Set-Location CopyPhoto
+py -3.14 -m venv .venv
+```
+
+Установить зависимости программы, тестов и сборки EXE:
+
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
+
+Все следующие команды README выполняются из корневого каталога CopyPhoto.
 
 ## Настройка
 
@@ -133,19 +157,19 @@ summary = AlbumProcessor(
 вместе с остальными зависимостями. Команда сборки:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build_exe.ps1
+.\build_exe.bat
 ```
-
-Параметр `ExecutionPolicy Bypass` действует только в запущенном процессе
-PowerShell и не меняет системную политику выполнения сценариев.
 
 По умолчанию сценарий использует `.venv\Scripts\python.exe`. Путь к другому
-окружению можно передать явно:
+окружению можно передать первым параметром:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build_exe.ps1 `
-    -PythonPath .\.build-venv\Scripts\python.exe
+.\build_exe.bat .\.build-venv\Scripts\python.exe
 ```
+
+`build_exe.bat` выбирает интерпретатор и запускает `build_exe.py`. Python-сценарий
+проверяет наличие `CopyPhoto.spec` и `settings.ini`, вызывает PyInstaller и
+копирует внешний файл настроек в каталог `dist`.
 
 Результат находится в каталоге `dist`:
 

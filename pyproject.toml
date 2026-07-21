@@ -2,7 +2,7 @@
 name = "copy-photo"
 version = "0.1.0"
 description = "Пакетный детектор бумажных фотографий на однотонной подложке"
-requires-python = ">=3.11"
+requires-python = ">=3.14,<3.15"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
