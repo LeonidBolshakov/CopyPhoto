@@ -134,7 +134,7 @@ def load_settings(
     path: Path = SETTINGS_PATH,
     project_dir: Path = PROJECT_DIR,
 ) -> ApplicationSettings:
-    """Загрузить settings.ini и построить типизированные конфигурации приложения."""
+    """Загрузить settings.ini и построить проверенные конфигурации приложения."""
     parser = _read_parser(path)
 
     input_dir = _directory_value(
@@ -150,10 +150,10 @@ def load_settings(
         project_dir,
     )
     output_format = _required_value(parser, "Сохранение", "Формат").casefold()
-    if output_format not in {"jpeg", "png"}:
+    if output_format not in {"jpg", "jpeg", "png"}:
         raise SettingsError(
             "в разделе [Сохранение] параметр «Формат» должен иметь значение "
-            "png или jpeg"
+            "jpg, jpeg или png"
         )
     filename_prefix = _required_value(parser, "Сохранение", "Префикс имени")
     filename_digits = _integer_value(parser, "Сохранение", "Количество цифр")

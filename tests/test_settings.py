@@ -79,6 +79,16 @@ def test_accepts_absolute_directories(tmp_path: Path) -> None:
     assert result.detector_config.input_dir == absolute_input
 
 
+def test_accepts_jpg_as_jpeg_format(tmp_path: Path) -> None:
+    path = tmp_path / "settings.ini"
+    write_settings(path, VALID_SETTINGS.replace("Формат = png", "Формат = jpg"))
+
+    result = load_settings(path, tmp_path)
+
+    assert result.export_config.output_format == "jpeg"
+    assert result.export_config.file_extension == ".jpg"
+
+
 def test_reports_missing_settings_file(tmp_path: Path) -> None:
     missing = tmp_path / "missing.ini"
 
@@ -107,7 +117,7 @@ def test_reports_missing_settings_file(tmp_path: Path) -> None:
         (
             "Формат = png",
             "Формат = bmp",
-            "png или jpeg",
+            "jpg, jpeg или png",
         ),
         (
             "Режим отладки = Нет",

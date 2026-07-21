@@ -36,12 +36,40 @@ def test_finds_next_index_without_reusing_existing_names(tmp_path: Path) -> None
 
 
 def test_rejects_invalid_export_settings(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="качество JPEG"):
+    with pytest.raises(ValueError, match="Качество JPEG"):
         ExportConfig(output_dir=tmp_path, jpeg_quality=101)
-    with pytest.raises(ValueError, match="недопустимые символы"):
+    with pytest.raises(ValueError, match="запрещённый символ"):
         ExportConfig(output_dir=tmp_path, filename_prefix="album*")
-    with pytest.raises(ValueError, match="формат результата"):
+    with pytest.raises(ValueError, match="Формат"):
         ExportConfig(output_dir=tmp_path, output_format="gif")
+
+
+def test_removes_spaces_around_filename_prefix(tmp_path: Path) -> None:
+    config = ExportConfig(
+        output_dir=tmp_path,
+        filename_prefix="  family album  ",
+    )
+
+    assert config.filename_prefix == "family album"
+    assert output_path(config, 1) == tmp_path / "family album_0001.jpg"
+
+
+def test_allows_dot_at_end_of_filename_prefix(tmp_path: Path) -> None:
+    config = ExportConfig(output_dir=tmp_path, filename_prefix="photo.")
+
+    assert output_path(config, 1) == tmp_path / "photo._0001.jpg"
+
+
+def test_treats_jpg_output_format_as_jpeg(tmp_path: Path) -> None:
+    config = ExportConfig(output_dir=tmp_path, output_format="jpg")
+
+    assert config.output_format == "jpeg"
+    assert config.file_extension == ".jpg"
+
+
+def test_rejects_filename_prefix_containing_only_spaces(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="после удаления пробелов"):
+        ExportConfig(output_dir=tmp_path, filename_prefix="   ")
 
 
 def test_png_numbering_is_independent_from_jpeg(tmp_path: Path) -> None:

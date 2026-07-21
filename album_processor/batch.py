@@ -1,4 +1,4 @@
-"""Совместимый функциональный интерфейс пакетной обработки CopyPhoto."""
+"""Функциональный интерфейс пакетной обработки через AlbumProcessor."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def process_input_directory(
     enhancer_config: EnhancerConfig = DEFAULT_ENHANCER_CONFIG,
     diagnostics_config: DiagnosticsConfig | None = None,
 ) -> BatchSummary:
-    """Совместимый функциональный интерфейс пакетной обработки."""
+    """Запустить пакетную обработку через AlbumProcessor."""
     return AlbumProcessor(
         config,
         export_config,

@@ -117,5 +117,5 @@ def test_rejects_technically_invalid_images(image: np.ndarray) -> None:
 
 @pytest.mark.parametrize("intensity", (-0.01, 1.01))
 def test_rejects_invalid_intensity(intensity: float) -> None:
-    with pytest.raises(ValueError, match="интенсивность"):
+    with pytest.raises(ValueError, match="Интенсивность"):
         EnhancerConfig(intensity=intensity)
