@@ -74,6 +74,16 @@ class BatchSummary:
     files: tuple[SourceProcessingReport, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _PhotoProcessingResult:
+    """Результаты сохранения всех фотографий одного исходного файла."""
+
+    saved_paths: tuple[Path, ...]
+    failed_photos: int
+    errors: tuple[str, ...]
+    next_index: int
+
+
 def _summarize_rejections(
     rejections: tuple[ContourRejection, ...],
 ) -> tuple[RejectionCount, ...]:
@@ -89,6 +99,47 @@ def _summarize_rejections(
         )
         for reason in ContourRejectionReason
         if counts[reason]
+    )
+
+
+def _source_failure_report(
+    source: Path,
+    error: Exception,
+) -> SourceProcessingReport:
+    """Создать отчёт о сбое чтения или обнаружения для одного источника."""
+    message = f"{source.name}: не удалось обработать исходный файл: {error}"
+    return SourceProcessingReport(
+        source=source,
+        processed=False,
+        detected_photos=0,
+        saved_paths=(),
+        failed_photos=0,
+        rejection_counts=(),
+        warnings=(),
+        distance_threshold=None,
+        background_tile_coverage=None,
+        errors=(message,),
+    )
+
+
+def _successful_source_report(
+    source: Path,
+    detection: DetectionResult,
+    photos: _PhotoProcessingResult,
+    diagnostic_errors: tuple[str, ...],
+) -> SourceProcessingReport:
+    """Создать отчёт об обработанном источнике и объединить ошибки этапов."""
+    return SourceProcessingReport(
+        source=source,
+        processed=True,
+        detected_photos=len(detection.detections),
+        saved_paths=photos.saved_paths,
+        failed_photos=photos.failed_photos,
+        rejection_counts=_summarize_rejections(detection.rejections),
+        warnings=detection.warnings,
+        distance_threshold=detection.distance_threshold,
+        background_tile_coverage=detection.background_tile_coverage,
+        errors=diagnostic_errors + photos.errors,
     )
 
 
@@ -113,7 +164,7 @@ class AlbumProcessor:
     def process(self) -> BatchSummary:
         """Обработать входной каталог и вернуть полный отчёт без печати в консоль."""
         self._prepare_directories()
-        sources = tuple(iter_source_images(self.detector_config.input_dir))
+        sources = iter_source_images(self.detector_config.input_dir)
         next_index = find_next_output_index(self.export_config)
         reports: list[SourceProcessingReport] = []
 
@@ -158,43 +209,48 @@ class AlbumProcessor:
             image = read_image(source)
             result = detect_photos(image, self.detector_config)
         except Exception as error:  # Ошибка одного файла не останавливает пакет.
-            message = (
-                f"{source.name}: не удалось обработать исходный файл: {error}"
-            )
-            return (
-                SourceProcessingReport(
-                    source=source,
-                    processed=False,
-                    detected_photos=0,
-                    saved_paths=(),
-                    failed_photos=0,
-                    rejection_counts=(),
-                    warnings=(),
-                    distance_threshold=None,
-                    background_tile_coverage=None,
-                    errors=(message,),
-                ),
-                next_index,
-            )
+            return _source_failure_report(source, error), next_index
 
+        diagnostic_errors = self._diagnostic_errors(source, result)
+        photos = self._process_photos(source, image, result, next_index)
+        return (
+            _successful_source_report(
+                source,
+                result,
+                photos,
+                diagnostic_errors,
+            ),
+            photos.next_index,
+        )
+
+    def _diagnostic_errors(
+        self,
+        source: Path,
+        result: DetectionResult,
+    ) -> tuple[str, ...]:
+        """Записать включённую диагностику и вернуть возникшую ошибку."""
+        config = self.diagnostics_config
+        if config is None or not config.enabled:
+            return ()
+        try:
+            self._write_diagnostics(source, result, config.output_dir)
+        except Exception as error:
+            return (
+                f"{source.name}: не удалось записать диагностику: {error}",
+            )
+        return ()
+
+    def _process_photos(
+        self,
+        source: Path,
+        image: np.ndarray,
+        result: DetectionResult,
+        next_index: int,
+    ) -> _PhotoProcessingResult:
+        """Кадрировать, скорректировать и сохранить найденные фотографии."""
         errors: list[str] = []
         saved_paths: list[Path] = []
         failed_photos = 0
-
-        if (
-            self.diagnostics_config is not None
-            and self.diagnostics_config.enabled
-        ):
-            try:
-                self._write_diagnostics(
-                    source,
-                    result,
-                    self.diagnostics_config.output_dir,
-                )
-            except Exception as error:
-                errors.append(
-                    f"{source.name}: не удалось записать диагностику: {error}"
-                )
 
         for photo_number, detection in enumerate(result.detections, start=1):
             try:
@@ -211,20 +267,11 @@ class AlbumProcessor:
                     f"{source.name}, фото {photo_number}: не удалось сохранить: {error}"
                 )
 
-        return (
-            SourceProcessingReport(
-                source=source,
-                processed=True,
-                detected_photos=len(result.detections),
-                saved_paths=tuple(saved_paths),
-                failed_photos=failed_photos,
-                rejection_counts=_summarize_rejections(result.rejections),
-                warnings=result.warnings,
-                distance_threshold=result.distance_threshold,
-                background_tile_coverage=result.background_tile_coverage,
-                errors=tuple(errors),
-            ),
-            next_index,
+        return _PhotoProcessingResult(
+            saved_paths=tuple(saved_paths),
+            failed_photos=failed_photos,
+            errors=tuple(errors),
+            next_index=next_index,
         )
 
     def _write_diagnostics(
