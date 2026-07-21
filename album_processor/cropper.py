@@ -10,14 +10,7 @@ import numpy as np
 
 from album_processor.config import DEFAULT_CROPPER_CONFIG, CropperConfig
 from album_processor.detector import PhotoDetection
-
-
-def _validate_image(image: np.ndarray) -> None:
-    """Проверить форму и непустой размер входного BGR-изображения."""
-    if image.ndim != 3 or image.shape[2] != 3:
-        raise ValueError("crop_photo ожидает трёхканальное изображение BGR")
-    if image.shape[0] == 0 or image.shape[1] == 0:
-        raise ValueError("crop_photo не может обработать пустое изображение")
+from album_processor.image_validation import validate_bgr_image
 
 
 def _source_patch(
@@ -342,7 +335,7 @@ def crop_photo(
     config: CropperConfig = DEFAULT_CROPPER_CONFIG,
 ) -> np.ndarray:
     """Вырезает фотографию в полном разрешении и выравнивает её края."""
-    _validate_image(image)
+    validate_bgr_image(image, "crop_photo")
     height, width = image.shape[:2]
     box = detection.box_for_size(width, height)
     if box.shape != (4, 2) or not np.all(np.isfinite(box)):

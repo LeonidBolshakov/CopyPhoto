@@ -26,7 +26,7 @@ from album_processor.detector import (
     detect_photos,
 )
 from album_processor.enhancer import enhance_photo
-from album_processor.image_reader import iter_source_images, read_image, write_image
+from album_processor.image_io import iter_source_images, read_image, write_image
 from album_processor.naming import find_next_output_index, output_path
 
 

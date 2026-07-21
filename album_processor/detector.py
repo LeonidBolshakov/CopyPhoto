@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 
 from album_processor.config import DetectorConfig
+from album_processor.image_validation import validate_bgr_image
 
 
 @dataclass(frozen=True, slots=True)
@@ -663,8 +664,7 @@ def _no_photos_warning(
 
 def detect_photos(image: np.ndarray, config: DetectorConfig) -> DetectionResult:
     """Найти фотографии на однотонной подложке в уменьшенной копии изображения."""
-    if image.ndim != 3 or image.shape[2] != 3:
-        raise ValueError("detect_photos ожидает трёхканальное изображение BGR")
+    validate_bgr_image(image, "detect_photos")
 
     preview = _resize_for_analysis(image, config.analysis_max_side)
     background = _background_mask(preview, config)

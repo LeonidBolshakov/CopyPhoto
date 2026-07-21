@@ -10,16 +10,7 @@ from album_processor.config import (
     EnhancementMode,
     EnhancerConfig,
 )
-
-
-def _validate_image(image: np.ndarray) -> None:
-    """Проверить технические требования к изображению для коррекции."""
-    if image.ndim != 3 or image.shape[2] != 3:
-        raise ValueError("enhance_photo ожидает трёхканальное изображение BGR")
-    if image.shape[0] == 0 or image.shape[1] == 0:
-        raise ValueError("enhance_photo не может обработать пустое изображение")
-    if image.dtype != np.uint8:
-        raise ValueError("enhance_photo ожидает изображение с типом uint8")
+from album_processor.image_validation import validate_bgr_image
 
 
 def _soft_enhancement(image: np.ndarray, config: EnhancerConfig) -> np.ndarray:
@@ -52,7 +43,7 @@ def enhance_photo(
     config: EnhancerConfig = DEFAULT_ENHANCER_CONFIG,
 ) -> np.ndarray:
     """Выполняет выбранную первичную коррекцию фотографии."""
-    _validate_image(image)
+    validate_bgr_image(image, "enhance_photo")
     if config.mode is EnhancementMode.NONE:
         return np.ascontiguousarray(image.copy())
     if config.mode is EnhancementMode.SOFT:

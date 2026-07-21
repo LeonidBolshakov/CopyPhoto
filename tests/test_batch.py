@@ -15,7 +15,7 @@ from album_processor.config import (
     EnhancerConfig,
     ExportConfig,
 )
-from album_processor.image_reader import read_image, write_image
+from album_processor.image_io import read_image, write_image
 from album_processor.processor import AlbumProcessor
 
 
