@@ -1,5 +1,6 @@
 .idea/
 .venv/
+.build-venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -9,3 +10,6 @@ debug/*
 !debug/.gitkeep
 output/*
 !output/.gitkeep
+build/
+dist/
+*.spec.bak

@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 
+import album_processor.settings as settings_module
 from album_processor.config import EnhancementMode
-from album_processor.settings import SettingsError, load_settings
+from album_processor.settings import SettingsError, _application_dir, load_settings
 
 
 VALID_SETTINGS = """
@@ -38,6 +39,21 @@ VALID_SETTINGS = """
 
 def write_settings(path: Path, content: str = VALID_SETTINGS) -> None:
     path.write_text(content.strip(), encoding="utf-8")
+
+
+def test_source_run_uses_project_directory() -> None:
+    assert _application_dir() == Path(settings_module.__file__).resolve().parent.parent
+
+
+def test_exe_run_uses_executable_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable = tmp_path / "distribution" / "CopyPhoto.exe"
+    monkeypatch.setattr(settings_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(settings_module.sys, "executable", str(executable))
+
+    assert _application_dir() == executable.parent.resolve()
 
 
 def test_loads_operator_settings_and_ignores_comments(tmp_path: Path) -> None:

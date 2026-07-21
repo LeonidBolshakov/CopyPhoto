@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import configparser
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,8 +17,15 @@ from album_processor.config import (
 )
 
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent
-SETTINGS_PATH = PROJECT_DIR / "settings.ini"
+def _application_dir() -> Path:
+    """Вернуть каталог исходного проекта или запущенного EXE-файла."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+APPLICATION_DIR = _application_dir()
+SETTINGS_PATH = APPLICATION_DIR / "settings.ini"
 
 
 class SettingsError(ValueError):
@@ -238,7 +246,7 @@ def _load_diagnostics_config(
 
 def load_settings(
     path: Path = SETTINGS_PATH,
-    project_dir: Path = PROJECT_DIR,
+    project_dir: Path = APPLICATION_DIR,
 ) -> ApplicationSettings:
     """Загрузить settings.ini и построить проверенные конфигурации приложения."""
     parser = _read_parser(path)
