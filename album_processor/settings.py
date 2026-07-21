@@ -16,7 +16,7 @@ from album_processor.config import (
 )
 
 
-PROJECT_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = Path(__file__).resolve().parent.parent
 SETTINGS_PATH = PROJECT_DIR / "settings.ini"
 
 

@@ -12,7 +12,7 @@ from album_processor.detector import (
 )
 from album_processor.processor import RejectionCount, SourceProcessingReport
 from main import _print_source_report
-from settings import SettingsError
+from album_processor.settings import SettingsError
 
 
 def test_console_report_explains_rejections_and_warnings(

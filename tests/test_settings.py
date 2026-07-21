@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from album_processor.config import EnhancementMode
-from settings import SettingsError, load_settings
+from album_processor.settings import SettingsError, load_settings
 
 
 VALID_SETTINGS = """

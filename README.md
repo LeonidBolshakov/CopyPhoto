@@ -68,7 +68,8 @@
 Коррекция выполняется после геометрического выравнивания и до записи JPEG или
 PNG.
 
-`settings.py` является служебным загрузчиком: он проверяет разделы и значения,
+`album_processor/settings.py` является служебным загрузчиком: он проверяет
+разделы и значения,
 преобразует проценты и ответы «Да/Нет» во внутренние типы. Алгоритмические
 пороги детектора, кадрирования и CLAHE остаются в `album_processor/config.py` и
 не предназначены для повседневного изменения оператором.
@@ -101,7 +102,7 @@ PNG.
 
 ```python
 from album_processor.processor import AlbumProcessor
-from settings import load_settings
+from album_processor.settings import load_settings
 
 settings = load_settings()
 summary = AlbumProcessor(

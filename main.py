@@ -6,7 +6,12 @@ from album_processor.processor import (
     BatchSummary,
     SourceProcessingReport,
 )
-from settings import ApplicationSettings, SETTINGS_PATH, SettingsError, load_settings
+from album_processor.settings import (
+    ApplicationSettings,
+    SETTINGS_PATH,
+    SettingsError,
+    load_settings,
+)
 
 
 def _print_source_report(report: SourceProcessingReport) -> None:
