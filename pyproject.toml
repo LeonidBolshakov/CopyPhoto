@@ -3,6 +3,17 @@ name = "copy-photo"
 version = "0.1.0"
 description = "Пакетный детектор бумажных фотографий на однотонной подложке"
 requires-python = ">=3.14,<3.15"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Leonid Bolshakov" },
+]
+
+[project.urls]
+Homepage = "https://github.com/LeonidBolshakov/CopyPhoto"
+Repository = "https://github.com/LeonidBolshakov/CopyPhoto"
+Releases = "https://github.com/LeonidBolshakov/CopyPhoto/releases"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

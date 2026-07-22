@@ -35,6 +35,7 @@ executable = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
+    version="CopyPhoto.version_info",
     codesign_identity=None,
     entitlements_file=None,
 )
