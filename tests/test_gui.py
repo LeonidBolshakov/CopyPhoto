@@ -12,7 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication, QDialogButtonBox, QFileDialog
 
-import gui as gui_module
+import main_window as main_window_module
 from album_processor.settings_editor import read_operator_settings
 from gui import DirectoryWidget, MainWindow, SettingsWidget
 
@@ -249,8 +249,8 @@ def test_changed_settings_are_saved_automatically(
 ) -> None:
     path = tmp_path / "settings.ini"
     path.write_text(SETTINGS_TEXT, encoding="utf-8")
-    monkeypatch.setattr(gui_module, "APPLICATION_DIR", tmp_path)
-    monkeypatch.setattr(gui_module, "SETTINGS_PATH", path)
+    monkeypatch.setattr(main_window_module, "APPLICATION_DIR", tmp_path)
+    monkeypatch.setattr(main_window_module, "SETTINGS_PATH", path)
     window = MainWindow()
 
     window.settings_widget.filename_prefix.setText("archive")
@@ -268,8 +268,8 @@ def test_close_flushes_pending_settings(
 ) -> None:
     path = tmp_path / "settings.ini"
     path.write_text(SETTINGS_TEXT, encoding="utf-8")
-    monkeypatch.setattr(gui_module, "APPLICATION_DIR", tmp_path)
-    monkeypatch.setattr(gui_module, "SETTINGS_PATH", path)
+    monkeypatch.setattr(main_window_module, "APPLICATION_DIR", tmp_path)
+    monkeypatch.setattr(main_window_module, "SETTINGS_PATH", path)
     window = MainWindow()
 
     window.settings_widget.filename_prefix.setText("on-close")
@@ -288,8 +288,8 @@ def test_restore_button_saves_standard_defaults(
         SETTINGS_TEXT.replace("Префикс имени = photo", "Префикс имени = archive"),
         encoding="utf-8",
     )
-    monkeypatch.setattr(gui_module, "APPLICATION_DIR", tmp_path)
-    monkeypatch.setattr(gui_module, "SETTINGS_PATH", path)
+    monkeypatch.setattr(main_window_module, "APPLICATION_DIR", tmp_path)
+    monkeypatch.setattr(main_window_module, "SETTINGS_PATH", path)
     window = MainWindow()
 
     window._apply_defaults()
