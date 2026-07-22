@@ -1,4 +1,4 @@
-"""Просмотр и безопасная очистка каталогов изображений."""
+"""Просмотр и безопасная очистка каталогов изображений в интерфейсе CopyPhoto."""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ class ImagePreview(QLabel):
     """Масштабируемая область предварительного просмотра изображения."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
+        """Настроить область масштабируемого предварительного просмотра."""
         super().__init__(parent)
         self._source_pixmap: QPixmap | None = None
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -42,19 +43,23 @@ class ImagePreview(QLabel):
         self.setText("Выберите изображение")
 
     def show_pixmap(self, pixmap: QPixmap) -> None:
+        """Показать изображение, масштабировав его под текущий размер области."""
         self._source_pixmap = pixmap
         self._scale_pixmap()
 
     def show_message(self, message: str) -> None:
+        """Очистить изображение и показать текстовое сообщение."""
         self._source_pixmap = None
         self.clear()
         self.setText(message)
 
     def resizeEvent(self, event: QResizeEvent | None) -> None:
+        """Перемасштабировать изображение после изменения размера виджета."""
         super().resizeEvent(event)
         self._scale_pixmap()
 
     def _scale_pixmap(self) -> None:
+        """Вписать исходное изображение в доступную область с сохранением пропорций."""
         if self._source_pixmap is None:
             return
         available = self.size() - QSize(20, 20)
@@ -77,6 +82,7 @@ class DirectoryWidget(QWidget):
         *,
         allow_cleanup: bool = True,
     ) -> None:
+        """Создать список файлов, предпросмотр и разрешённые действия каталога."""
         super().__init__(parent)
         self._directory = Path()
         self._empty_text = empty_text
@@ -146,12 +152,14 @@ class DirectoryWidget(QWidget):
         ]
 
     def set_directory(self, directory: Path) -> None:
+        """Установить отображаемый каталог и обновить список при его изменении."""
         if directory == self._directory:
             return
         self._directory = directory
         self.refresh()
 
     def refresh(self) -> None:
+        """Повторно прочитать каталог, сохранив текущий выбор при возможности."""
         selected_path = None
         current = self.file_list.currentItem()
         if current is not None:
@@ -210,7 +218,15 @@ class DirectoryWidget(QWidget):
                 "Поддерживаемых изображений для удаления нет.",
             )
             return
+        if not self._confirm_cleanup_dialog(paths):
+            return
 
+        moved, failures = self._trash_images(paths)
+        self.refresh()
+        self._show_cleanup_result(moved, failures)
+
+    def _confirm_cleanup_dialog(self, paths: list[Path]) -> bool:
+        """Показать состав очистки и вернуть подтверждение пользователя."""
         dialog = QMessageBox(self)
         dialog.setIcon(QMessageBox.Icon.Warning)
         dialog.setWindowTitle("Очистить каталог")
@@ -230,11 +246,10 @@ class DirectoryWidget(QWidget):
         )
         dialog.setDefaultButton(cancel_button)
         dialog.exec()
-        if dialog.clickedButton() is not clean_button:
-            return
+        return dialog.clickedButton() is clean_button
 
-        moved, failures = self._trash_images(paths)
-        self.refresh()
+    def _show_cleanup_result(self, moved: int, failures: list[Path]) -> None:
+        """Показать итог полного или частичного перемещения файлов в Корзину."""
         if failures:
             failed_names = ", ".join(path.name for path in failures[:5])
             if len(failures) > 5:
@@ -269,6 +284,7 @@ class DirectoryWidget(QWidget):
 
     @staticmethod
     def _move_to_trash(path: Path) -> bool:
+        """Переместить один файл в системную Корзину средствами Qt."""
         success, _new_path = QFile.moveToTrash(str(path))
         return success
 
@@ -278,6 +294,7 @@ class DirectoryWidget(QWidget):
         title: str,
         text: str,
     ) -> None:
+        """Показать результат очистки с русской кнопкой закрытия."""
         dialog = QMessageBox(self)
         dialog.setIcon(icon)
         dialog.setWindowTitle(title)
@@ -294,6 +311,7 @@ class DirectoryWidget(QWidget):
         current: QListWidgetItem | None,
         _previous: QListWidgetItem | None,
     ) -> None:
+        """Открыть выбранное изображение и показать его параметры и предпросмотр."""
         if current is None:
             return
         path = Path(current.data(Qt.ItemDataRole.UserRole))

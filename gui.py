@@ -6,9 +6,13 @@ import sys
 
 from PyQt6.QtWidgets import QApplication
 
-from directory_widget import DirectoryWidget, ImagePreview
-from main_window import APP_TITLE, MainWindow
-from settings_widget import SettingsWidget
+from copyphoto_gui import (
+    APP_TITLE,
+    DirectoryWidget,
+    ImagePreview,
+    MainWindow,
+    SettingsWidget,
+)
 
 __all__ = [
     "DirectoryWidget",
@@ -23,7 +27,6 @@ def main() -> int:
     """Создать QApplication и показать главное окно."""
     application = QApplication(sys.argv)
     application.setApplicationName(APP_TITLE)
-    application.setOrganizationName("CopyPhoto")
     window = MainWindow()
     window.show()
     return application.exec()

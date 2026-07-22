@@ -1,4 +1,4 @@
-"""Форма редактирования операторских настроек CopyPhoto."""
+"""Форма редактирования операторских настроек в интерфейсе CopyPhoto."""
 
 from __future__ import annotations
 
@@ -40,17 +40,36 @@ class SettingsWidget(QScrollArea):
     settings_changed = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
+        """Загрузить UI-форму, найти поля и подключить сигналы изменений."""
         super().__init__(parent)
         self._updating = False
         self.setWidgetResizable(True)
+        loaded = self._load_form()
+        self._bind_directory_fields(loaded)
+        self._bind_export_fields(loaded)
+        self._bind_processing_fields(loaded)
+        self._bind_diagnostics_fields(loaded)
+        self._connect_numeric_buttons()
+        self._connect_browse_buttons(loaded)
+        self._connect_dependency_signals()
+        self._connect_change_signals()
+
+    def _load_form(self) -> QWidget:
+        """Загрузить settings_form.ui, установить форму и вернуть корневой виджет."""
         loaded = uic.loadUi(str(SETTINGS_FORM_PATH))
         if not isinstance(loaded, QWidget):
             raise RuntimeError(f"не удалось загрузить форму {SETTINGS_FORM_PATH}")
         self.setWidget(loaded)
+        return loaded
 
+    def _bind_directory_fields(self, loaded: QWidget) -> None:
+        """Сохранить ссылки на поля рабочих каталогов."""
         self.input_directory = self._find(loaded, QLineEdit, "inputDirectoryEdit")
         self.output_directory = self._find(loaded, QLineEdit, "outputDirectoryEdit")
         self.final_directory = self._find(loaded, QLineEdit, "finalDirectoryEdit")
+
+    def _bind_export_fields(self, loaded: QWidget) -> None:
+        """Сохранить ссылки на элементы формата и именования результатов."""
         self.output_format = self._find(loaded, QComboBox, "outputFormatCombo")
         self.jpeg_quality_label = self._find(loaded, QLabel, "jpegQualityLabel")
         self.jpeg_quality = self._find(loaded, QSpinBox, "jpegQualitySpin")
@@ -60,12 +79,6 @@ class SettingsWidget(QScrollArea):
         self.jpeg_quality_increase = self._find(
             loaded, QPushButton, "jpegQualityIncreaseButton"
         )
-        self.jpeg_quality_decrease.clicked.connect(
-            lambda: self.jpeg_quality.stepDown()
-        )
-        self.jpeg_quality_increase.clicked.connect(
-            lambda: self.jpeg_quality.stepUp()
-        )
         self.filename_prefix = self._find(loaded, QLineEdit, "filenamePrefixEdit")
         self.filename_digits = self._find(loaded, QSpinBox, "filenameDigitsSpin")
         self.filename_digits_decrease = self._find(
@@ -74,6 +87,9 @@ class SettingsWidget(QScrollArea):
         self.filename_digits_increase = self._find(
             loaded, QPushButton, "filenameDigitsIncreaseButton"
         )
+
+    def _bind_processing_fields(self, loaded: QWidget) -> None:
+        """Сохранить ссылки на элементы ориентации и коррекции."""
         self.rotate_portrait = self._find(loaded, QCheckBox, "rotatePortraitCheck")
         self.enhancement_mode = self._find(
             loaded, QComboBox, "enhancementModeCombo"
@@ -90,13 +106,25 @@ class SettingsWidget(QScrollArea):
         self.enhancement_intensity_increase = self._find(
             loaded, QPushButton, "enhancementIntensityIncreaseButton"
         )
+        self.enhancement_mode.addItems(default_enhancement_modes())
+
+    def _bind_diagnostics_fields(self, loaded: QWidget) -> None:
+        """Сохранить ссылки на переключатель и каталог диагностики."""
         self.diagnostics_enabled = self._find(
             loaded, QCheckBox, "diagnosticsEnabledCheck"
         )
         self.diagnostics_directory = self._find(
             loaded, QLineEdit, "diagnosticsDirectoryEdit"
         )
-        self.enhancement_mode.addItems(default_enhancement_modes())
+
+    def _connect_numeric_buttons(self) -> None:
+        """Подключить кнопки увеличения и уменьшения числовых параметров."""
+        self.jpeg_quality_decrease.clicked.connect(
+            lambda: self.jpeg_quality.stepDown()
+        )
+        self.jpeg_quality_increase.clicked.connect(
+            lambda: self.jpeg_quality.stepUp()
+        )
         for decrease, increase, spin_box in (
             (
                 self.filename_digits_decrease,
@@ -116,6 +144,8 @@ class SettingsWidget(QScrollArea):
                 lambda _checked=False, spin=spin_box: spin.stepUp()
             )
 
+    def _connect_browse_buttons(self, loaded: QWidget) -> None:
+        """Связать кнопки обзора с соответствующими полями каталогов."""
         browse_fields = (
             ("inputBrowseButton", self.input_directory),
             ("outputBrowseButton", self.output_directory),
@@ -128,11 +158,16 @@ class SettingsWidget(QScrollArea):
                 lambda _checked=False, edit=field: self._browse(edit)
             )
 
+    def _connect_dependency_signals(self) -> None:
+        """Подключить сигналы, изменяющие доступность зависимых полей."""
         self.output_format.currentTextChanged.connect(self._update_dependencies)
         self.enhancement_mode.currentTextChanged.connect(
             self._update_dependencies
         )
         self.diagnostics_enabled.toggled.connect(self._update_dependencies)
+
+    def _connect_change_signals(self) -> None:
+        """Подключить изменяемые значения формы к общему сигналу настроек."""
         for signal in (
             self.input_directory.textChanged,
             self.output_directory.textChanged,
@@ -155,12 +190,14 @@ class SettingsWidget(QScrollArea):
         widget_type: type[_WidgetT],
         name: str,
     ) -> _WidgetT:
+        """Найти обязательный элемент формы с проверкой его типа."""
         widget: _WidgetT | None = parent.findChild(widget_type, name)
         if widget is None:
             raise RuntimeError(f"в settings_form.ui не найден элемент {name}")
         return widget
 
     def _browse(self, field: QLineEdit) -> None:
+        """Выбрать каталог и записать выбранный путь в указанное поле."""
         current = Path(field.text().strip()).expanduser()
         if not current.is_absolute():
             current = APPLICATION_DIR / current
@@ -189,6 +226,7 @@ class SettingsWidget(QScrollArea):
         return dialog
 
     def _update_dependencies(self) -> None:
+        """Обновить доступность полей, зависящих от других настроек."""
         jpeg_enabled = self.output_format.currentText() == "JPEG"
         self.jpeg_quality.setEnabled(jpeg_enabled)
         self.jpeg_quality_label.setEnabled(jpeg_enabled)
@@ -202,10 +240,12 @@ class SettingsWidget(QScrollArea):
         self.diagnostics_directory.setEnabled(self.diagnostics_enabled.isChecked())
 
     def _emit_settings_changed(self) -> None:
+        """Сообщить об изменении оператором, если форма не заполняется программно."""
         if not self._updating:
             self.settings_changed.emit()
 
     def set_settings(self, settings: OperatorSettings) -> None:
+        """Заполнить элементы формы переданными операторскими настройками."""
         self._updating = True
         try:
             self.input_directory.setText(settings.input_directory)
@@ -230,6 +270,7 @@ class SettingsWidget(QScrollArea):
             self._updating = False
 
     def settings(self) -> OperatorSettings:
+        """Собрать текущие значения элементов формы в OperatorSettings."""
         return OperatorSettings(
             input_directory=self.input_directory.text().strip(),
             output_directory=self.output_directory.text().strip(),

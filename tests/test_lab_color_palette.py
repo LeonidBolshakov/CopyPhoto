@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from lab_color_palette import create_lab_palette, generate_color_samples
+from tools.lab_color_palette import create_lab_palette, generate_color_samples
 
 
 def test_generates_displayable_colors_near_requested_distances() -> None:

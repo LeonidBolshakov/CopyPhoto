@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-import main as main_module
+import copyphoto_cli as main_module
 from album_processor.detector import (
     ContourRejectionReason,
     DetectionWarning,
@@ -20,7 +20,7 @@ from album_processor.processor import (
     SourceProcessingReport,
 )
 from album_processor.settings import ApplicationSettings, SettingsError
-from main import _print_source_report
+from copyphoto_cli import _print_source_report
 
 
 def test_console_report_explains_rejections_and_warnings(

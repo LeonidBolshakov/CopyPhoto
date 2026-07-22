@@ -1,4 +1,4 @@
-"""Формирование последовательных имён без перезаписи результатов."""
+"""Формирование последовательных имён и версий без перезаписи файлов."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def format_output_name(
 
 
 def find_next_output_index(config: ExportConfig) -> int:
-    """Найти следующий свободный номер среди файлов выбранного формата."""
+    """Вернуть номер после максимального существующего для формата и префикса."""
     if not config.output_dir.exists():
         return 1
     pattern = re.compile(
@@ -57,7 +57,7 @@ def output_path(config: ExportConfig, index: int) -> Path:
 
 
 def next_version_path(original_path: Path) -> Path:
-    """Сохранить свободное имя или добавить следующую версию при совпадении."""
+    """Вернуть исходный путь или путь со следующей версией при совпадении."""
     if not original_path.parent.exists():
         return original_path
 

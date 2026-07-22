@@ -12,7 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication, QDialogButtonBox, QFileDialog
 
-import main_window as main_window_module
+import copyphoto_gui.main_window as main_window_module
 from album_processor.settings_editor import read_operator_settings
 from gui import DirectoryWidget, MainWindow, SettingsWidget
 

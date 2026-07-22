@@ -27,7 +27,7 @@ def iter_source_images(directory: Path) -> list[Path]:
 
 
 def read_image(path: Path) -> np.ndarray:
-    """Прочитать HEIC/JPEG/PNG, применить EXIF-ориентацию и вернуть пиксели BGR."""
+    """Прочитать HEIC/HEIF/JPEG/PNG с EXIF-ориентацией и вернуть пиксели BGR."""
     with Image.open(path) as opened:
         rgb = ImageOps.exif_transpose(opened).convert("RGB")
         pixels = np.asarray(rgb)

@@ -38,8 +38,8 @@ from album_processor.settings_editor import (
     replace_invalid_text_with_defaults,
     save_operator_settings,
 )
-from directory_widget import DirectoryWidget
-from settings_widget import SettingsWidget
+from copyphoto_gui.directory_widget import DirectoryWidget
+from copyphoto_gui.settings_widget import SettingsWidget
 
 
 APP_TITLE = "CopyPhoto"
@@ -49,10 +49,12 @@ class _SignalStream(TextIOBase):
     """Текстовый поток, отправляющий готовые строки через Qt-сигнал."""
 
     def __init__(self, output: Any) -> None:
+        """Сохранить Qt-сигнал назначения и создать пустой буфер строки."""
         self._output = output
         self._buffer = ""
 
     def write(self, text: str) -> int:
+        """Добавить текст в буфер и отправить каждую завершённую строку."""
         self._buffer += text
         while "\n" in self._buffer:
             line, self._buffer = self._buffer.split("\n", 1)
@@ -60,6 +62,7 @@ class _SignalStream(TextIOBase):
         return len(text)
 
     def flush(self) -> None:
+        """Отправить оставшийся незавершённый текст и очистить буфер."""
         if self._buffer:
             self._output.emit(self._buffer)
             self._buffer = ""
@@ -73,9 +76,10 @@ class ProcessingWorker(QObject):
 
     @pyqtSlot()
     def run(self) -> None:
+        """Выполнить консольную обработку и передать вывод и код завершения."""
         from contextlib import redirect_stderr, redirect_stdout
 
-        from main import main as console_main
+        from copyphoto_cli import main as console_main
 
         stream = _SignalStream(self.output)
         try:
@@ -93,15 +97,30 @@ class MainWindow(QMainWindow):
     """Главное окно управления CopyPhoto."""
 
     def __init__(self) -> None:
+        """Создать страницы приложения, подключить действия и загрузить настройки."""
         super().__init__()
         self._thread: QThread | None = None
         self._worker: ProcessingWorker | None = None
         self._settings_dirty = False
         self._last_settings_error = ""
+        self._configure_window()
+        actions = self._create_header_actions()
+        self.tabs = QTabWidget()
+        self._add_settings_tab()
+        self._add_directory_tab()
+        self._add_log_tab()
+        self._set_central_content(actions)
+        self._configure_status_and_auto_save()
+        self._load_settings_from_disk()
+
+    def _configure_window(self) -> None:
+        """Задать название и исходные ограничения размера главного окна."""
         self.setWindowTitle(APP_TITLE)
         self.resize(980, 840)
         self.setMinimumSize(800, 700)
 
+    def _create_header_actions(self) -> QHBoxLayout:
+        """Создать заголовок и основные кнопки окна."""
         title = QLabel("CopyPhoto")
         title.setObjectName("applicationTitle")
         subtitle = QLabel(
@@ -123,12 +142,16 @@ class MainWindow(QMainWindow):
         actions.addLayout(heading, 1)
         actions.addWidget(self.restore_button)
         actions.addWidget(self.run_button)
+        return actions
 
-        self.tabs = QTabWidget()
+    def _add_settings_tab(self) -> None:
+        """Создать и добавить вкладку операторских настроек."""
         self.settings_widget = SettingsWidget()
         self.settings_widget.settings_changed.connect(self._schedule_auto_save)
         self.tabs.addTab(self.settings_widget, "Настройки")
 
+    def _add_directory_tab(self) -> None:
+        """Создать вкладки входных, готовых, итоговых и диагностических файлов."""
         self.directory_tabs = QTabWidget()
         self.input_files = DirectoryWidget("Во входном каталоге нет изображений")
         self.output_files = DirectoryWidget("В каталоге результатов нет изображений")
@@ -155,6 +178,8 @@ class MainWindow(QMainWindow):
         self.directory_tabs.addTab(self.diagnostic_files, "Диагностика")
         self.tabs.addTab(self.directory_tabs, "Изображения")
 
+    def _add_log_tab(self) -> None:
+        """Создать вкладку журнала с действиями очистки и сохранения."""
         log_page = QWidget()
         log_layout = QVBoxLayout(log_page)
         log_actions = QHBoxLayout()
@@ -172,6 +197,8 @@ class MainWindow(QMainWindow):
         log_layout.addWidget(self.log, 1)
         self.tabs.addTab(log_page, "Журнал")
 
+    def _set_central_content(self, actions: QHBoxLayout) -> None:
+        """Разместить верхние действия и вкладки в центральном виджете."""
         central = QWidget()
         layout = QVBoxLayout(central)
         layout.setContentsMargins(22, 18, 22, 22)
@@ -179,6 +206,9 @@ class MainWindow(QMainWindow):
         layout.addLayout(actions)
         layout.addWidget(self.tabs, 1)
         self.setCentralWidget(central)
+
+    def _configure_status_and_auto_save(self) -> None:
+        """Настроить строку состояния, стиль и таймер сохранения настроек."""
         status_bar = self.statusBar()
         assert status_bar is not None
         self.status_bar = status_bar
@@ -190,9 +220,8 @@ class MainWindow(QMainWindow):
         self._auto_save_timer.setInterval(500)
         self._auto_save_timer.timeout.connect(self._auto_save)
 
-        self._load_settings_from_disk()
-
     def _load_settings_from_disk(self) -> None:
+        """Загрузить настройки в форму и назначить каталоги файловым вкладкам."""
         try:
             editor_settings = read_operator_settings(SETTINGS_PATH)
             application_settings = self._load_validated_settings()
@@ -215,6 +244,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _load_validated_settings():
+        """Загрузить и проверить настройки относительно каталога приложения."""
         from album_processor.settings import load_settings
 
         return load_settings(SETTINGS_PATH, APPLICATION_DIR)
@@ -225,6 +255,7 @@ class MainWindow(QMainWindow):
         show_success: bool = True,
         show_error: bool = True,
     ) -> bool:
+        """Проверить и сохранить форму, при необходимости показав результат."""
         try:
             save_operator_settings(
                 SETTINGS_PATH,
@@ -249,16 +280,19 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def _schedule_auto_save(self) -> None:
+        """Отметить настройки изменёнными и отложить автоматическое сохранение."""
         self._settings_dirty = True
         self.status_bar.showMessage("Сохранение настроек…")
         self._auto_save_timer.start()
 
     @pyqtSlot()
     def _auto_save(self) -> None:
+        """Сохранить настройки, если после последней записи они изменились."""
         if self._settings_dirty:
             self.save_settings(show_success=True, show_error=False)
 
     def _refresh_directory_paths(self) -> None:
+        """Обновить каталоги файловых вкладок по сохранённым настройкам."""
         try:
             settings = self._load_validated_settings()
         except SettingsError:
@@ -271,6 +305,7 @@ class MainWindow(QMainWindow):
         )
 
     def restore_defaults(self) -> None:
+        """Запросить подтверждение восстановления стандартных настроек."""
         dialog = QMessageBox(self)
         dialog.setIcon(QMessageBox.Icon.Question)
         dialog.setWindowTitle("Восстановить настройки")
@@ -297,15 +332,10 @@ class MainWindow(QMainWindow):
         self.save_settings(show_success=True, show_error=True)
 
     def _confirm_move_to_final(self, source_kind: str) -> None:
-        """Подтвердить перенос выбранных готовых фотографий в итоговые."""
-        if source_kind == "input":
-            source_widget = self.input_files
-            source_title = "Входные"
-            prefix_letter = "В"
-        else:
-            source_widget = self.output_files
-            source_title = "Готовые"
-            prefix_letter = ""
+        """Подтвердить перенос выбранных входных или готовых файлов в итоговые."""
+        source_widget, source_title, prefix_letter = self._move_source_context(
+            source_kind
+        )
         sources = source_widget.selected_paths()
         if not sources:
             self._show_message(
@@ -315,48 +345,23 @@ class MainWindow(QMainWindow):
             )
             return
         try:
-            settings = self._load_validated_settings()
+            source_directory, final_directory = self._move_directories(source_kind)
         except SettingsError as error:
             self._show_error("Не удалось прочитать настройки", str(error))
             return
 
-        source_directory = (
-            settings.detector_config.input_dir.resolve()
-            if source_kind == "input"
-            else settings.export_config.output_dir.resolve()
-        )
-        final_directory = settings.final_directory.resolve()
         if source_directory == final_directory:
             self._show_error(
                 "Каталоги совпадают",
-                "Каталоги готовых и итоговых фотографий должны отличаться.",
+                "Исходный и итоговый каталоги должны отличаться.",
             )
             return
-
-        dialog = QMessageBox(self)
-        dialog.setIcon(QMessageBox.Icon.Question)
-        dialog.setWindowTitle("Переместить в итоговые")
-        dialog.setText(f"Переместить выбранных фотографий: {len(sources)}?")
-        dialog.setInformativeText(
-            f"Из: {source_directory}\nВ: {final_directory}\n\n"
-            + (
-                "Свободные исходные имена будут сохранены. При совпадении "
-                "к исходному имени будет добавлен номер версии."
-                if source_kind == "output"
-                else "Существующие файлы не будут перезаписаны."
-            )
-        )
-        move_button = dialog.addButton(
-            "Переместить",
-            QMessageBox.ButtonRole.AcceptRole,
-        )
-        cancel_button = dialog.addButton(
-            "Отмена",
-            QMessageBox.ButtonRole.RejectRole,
-        )
-        dialog.setDefaultButton(cancel_button)
-        dialog.exec()
-        if dialog.clickedButton() is not move_button:
+        if not self._confirm_move_dialog(
+            sources,
+            source_directory,
+            final_directory,
+            version_collisions=source_kind == "output",
+        ):
             return
 
         moved, failures = self._move_files_to_final(
@@ -372,6 +377,63 @@ class MainWindow(QMainWindow):
         )
         source_widget.refresh()
         self.final_files.refresh()
+        self._show_move_result(moved, failures)
+
+    def _move_source_context(
+        self,
+        source_kind: str,
+    ) -> tuple[DirectoryWidget, str, str]:
+        """Вернуть виджет, название вкладки и букву префикса источника."""
+        if source_kind == "input":
+            return self.input_files, "Входные", "В"
+        return self.output_files, "Готовые", ""
+
+    def _move_directories(self, source_kind: str) -> tuple[Path, Path]:
+        """Получить проверенные исходный и итоговый каталоги переноса."""
+        settings = self._load_validated_settings()
+        source_directory = (
+            settings.detector_config.input_dir.resolve()
+            if source_kind == "input"
+            else settings.export_config.output_dir.resolve()
+        )
+        return source_directory, settings.final_directory.resolve()
+
+    def _confirm_move_dialog(
+        self,
+        sources: list[Path],
+        source_directory: Path,
+        final_directory: Path,
+        *,
+        version_collisions: bool,
+    ) -> bool:
+        """Показать условия переноса и вернуть подтверждение пользователя."""
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.Question)
+        dialog.setWindowTitle("Переместить в итоговые")
+        dialog.setText(f"Переместить выбранных фотографий: {len(sources)}?")
+        collision_text = (
+            "Свободные исходные имена будут сохранены. При совпадении "
+            "к исходному имени будет добавлен номер версии."
+            if version_collisions
+            else "Существующие файлы не будут перезаписаны."
+        )
+        dialog.setInformativeText(
+            f"Из: {source_directory}\nВ: {final_directory}\n\n{collision_text}"
+        )
+        move_button = dialog.addButton(
+            "Переместить",
+            QMessageBox.ButtonRole.AcceptRole,
+        )
+        cancel_button = dialog.addButton(
+            "Отмена",
+            QMessageBox.ButtonRole.RejectRole,
+        )
+        dialog.setDefaultButton(cancel_button)
+        dialog.exec()
+        return dialog.clickedButton() is move_button
+
+    def _show_move_result(self, moved: int, failures: list[str]) -> None:
+        """Показать итог полного или частичного переноса фотографий."""
         if failures:
             descriptions = "\n".join(failures[:5])
             if len(failures) > 5:
@@ -440,6 +502,7 @@ class MainWindow(QMainWindow):
         return moved, failures
 
     def start_processing(self) -> None:
+        """Сохранить настройки и запустить обработку в отдельном потоке Qt."""
         if self._thread is not None:
             return
         self._auto_save_timer.stop()
@@ -468,6 +531,7 @@ class MainWindow(QMainWindow):
         thread.start()
 
     def _set_processing_state(self, processing: bool) -> None:
+        """Обновить доступность действий и надписи для состояния обработки."""
         self.run_button.setDisabled(processing)
         self.restore_button.setDisabled(processing)
         self.settings_widget.setDisabled(processing)
@@ -485,6 +549,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(str)
     def _append_log_line(self, line: str) -> None:
+        """Добавить строку в журнал и прокрутить его к последней записи."""
         self.log.appendPlainText(line)
         scrollbar = self.log.verticalScrollBar()
         assert scrollbar is not None
@@ -492,6 +557,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(int)
     def _processing_finished(self, exit_code: int) -> None:
+        """Отразить код завершения и обновить содержимое всех каталогов."""
         self.log.appendPlainText(f"===== Завершено, код {exit_code} =====")
         self._set_processing_state(False)
         self.input_files.refresh()
@@ -507,14 +573,17 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def _thread_finished(self) -> None:
+        """Удалить ссылки на завершившиеся рабочий объект и поток."""
         self._thread = None
         self._worker = None
 
     def _clear_log(self) -> None:
+        """Очистить журнал, если обработка сейчас не выполняется."""
         if self._thread is None:
             self.log.clear()
 
     def _save_log(self) -> None:
+        """Предложить имя файла и сохранить текущий текст журнала в UTF-8."""
         default_name = APPLICATION_DIR / (
             f"CopyPhoto-{datetime.now():%Y%m%d-%H%M%S}.log"
         )
@@ -532,6 +601,7 @@ class MainWindow(QMainWindow):
             self._show_error("Не удалось сохранить журнал", str(error))
 
     def _show_error(self, title: str, text: str) -> None:
+        """Показать сообщение об ошибке в строке состояния и диалоге."""
         self.status_bar.showMessage(title, 8000)
         self._show_message(QMessageBox.Icon.Critical, title, text)
 
@@ -585,6 +655,7 @@ class MainWindow(QMainWindow):
         return True
 
     def closeEvent(self, event: QCloseEvent | None) -> None:
+        """Не закрывать окно во время обработки и сохранить ожидающие настройки."""
         if event is None:
             return
         if self._thread is not None:

@@ -62,6 +62,7 @@ def read_operator_settings(path: Path) -> OperatorSettings:
     parser = _read_parser(path)
 
     def integer(section: str, option: str) -> int:
+        """Прочитать целочисленное значение или сообщить об ошибке настройки."""
         value = _raw_value(parser, section, option)
         try:
             return int(value)
@@ -71,6 +72,7 @@ def read_operator_settings(path: Path) -> OperatorSettings:
             ) from error
 
     def yes_no(section: str, option: str) -> bool:
+        """Преобразовать операторское значение «Да» или «Нет» в bool."""
         value = _raw_value(parser, section, option).casefold()
         if value == "да":
             return True
@@ -138,7 +140,7 @@ _OPTION_PATTERN = re.compile(r"^(\s*)([^=:#]+?)(\s*)=(.*)$")
 
 
 def render_operator_settings(source: str, settings: OperatorSettings) -> str:
-    """Заменить только значения параметров, сохранив комментарии и структуру."""
+    """Обновить параметры, сохранив разделы, порядок и комментарии INI."""
     replacements = _serialized_values(settings)
     missing = set(replacements)
     section = ""
@@ -213,10 +215,11 @@ def default_enhancement_modes() -> tuple[str, ...]:
 def replace_invalid_text_with_defaults(
     settings: OperatorSettings,
 ) -> OperatorSettings:
-    """Заменить некорректные текстовые поля стандартными значениями."""
+    """Заменить некорректные каталоги и префикс стандартными значениями."""
     values = _serialized_values(settings)
 
     def directory(section: str, option: str, default: str) -> str:
+        """Вернуть допустимый текст каталога или стандартное значение."""
         value = values[(section, option)]
         return value if value and not any(character in value for character in "\r\n") else default
 

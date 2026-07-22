@@ -228,7 +228,7 @@ class AlbumProcessor:
         source: Path,
         result: DetectionResult,
     ) -> tuple[str, ...]:
-        """Записать включённую диагностику и вернуть возникшую ошибку."""
+        """Записать включённую диагностику и вернуть сообщения об ошибках."""
         config = self.diagnostics_config
         if config is None or not config.enabled:
             return ()

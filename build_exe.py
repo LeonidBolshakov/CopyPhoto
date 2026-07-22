@@ -10,7 +10,6 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent
 SPEC_PATH = PROJECT_DIR / "CopyPhoto.spec"
-VERSION_INFO_PATH = PROJECT_DIR / "CopyPhoto.version_info"
 SETTINGS_PATH = PROJECT_DIR / "settings.ini"
 DISTRIBUTION_DIR = PROJECT_DIR / "dist"
 EXECUTABLE_PATH = DISTRIBUTION_DIR / "CopyPhoto.exe"
@@ -29,7 +28,6 @@ def main() -> int:
     """Собрать CopyPhoto.exe и скопировать рядом внешний settings.ini."""
     required_files = (
         (SPEC_PATH, "файл задания PyInstaller"),
-        (VERSION_INFO_PATH, "файл метаданных версии EXE"),
         (SETTINGS_PATH, "внешний файл настроек"),
     )
     if not all(
