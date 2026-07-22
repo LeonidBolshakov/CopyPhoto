@@ -125,8 +125,9 @@ def main() -> int:
     summary = _create_processor(application_settings).process()
     if not summary.files:
         print("Во входной папке нет поддерживаемых изображений.")
-    for report in summary.files:
-        _print_source_report(report)
+    if application_settings.diagnostics_config.enabled:
+        for report in summary.files:
+            _print_source_report(report)
 
     _print_summary(summary)
     return 1 if summary.errors else 0

@@ -18,13 +18,15 @@ jobs:
   build-windows:
     name: Python 3.14, тесты и EXE
     runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: "utf-8"
 
     steps:
       - name: Получение исходного кода
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Установка Python 3.14
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.14"
           cache: pip
