@@ -1,0 +1,64 @@
+name: Проверка и сборка Windows
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Python 3.14, тесты и EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Получение исходного кода
+        uses: actions/checkout@v4
+
+      - name: Установка Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Установка зависимостей
+        run: python -m pip install --requirement requirements.txt
+
+      - name: Автоматические тесты
+        run: python -m pytest
+
+      - name: Статическая проверка типов
+        run: python -m mypy .
+
+      - name: Сборка CopyPhoto.exe
+        run: python build_exe.py
+
+      - name: Проверка метаданных EXE
+        shell: pwsh
+        run: |
+          $expectedVersion = python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])"
+          $version = (Get-Item -LiteralPath dist\CopyPhoto.exe).VersionInfo
+          if ($version.ProductName -ne "CopyPhoto") {
+              throw "В метаданных EXE указано имя продукта '$($version.ProductName)'"
+          }
+          if ($version.ProductVersion -ne $expectedVersion) {
+              throw "Версия EXE '$($version.ProductVersion)' отличается от версии проекта '$expectedVersion'"
+          }
+
+      - name: Публикация проверенного результата сборки
+        uses: actions/upload-artifact@v4
+        with:
+          name: CopyPhoto-windows-${{ github.sha }}
+          path: |
+            dist/CopyPhoto.exe
+            dist/settings.ini
+          if-no-files-found: error
+          retention-days: 30
