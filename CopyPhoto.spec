@@ -1,13 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""Сборочное задание PyInstaller для одного консольного EXE-файла."""
+"""Сборочное задание PyInstaller для одного графического EXE-файла."""
 
 
 analysis = Analysis(
-    ["main.py"],
+    ["gui.py"],
     pathex=[],
     binaries=[],
-    # settings.ini намеренно остаётся внешним операторским файлом.
-    datas=[],
+    # settings.ini остаётся внешним; Qt Designer-форма входит в EXE.
+    datas=[("settings_form.ui", ".")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -31,7 +31,7 @@ executable = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

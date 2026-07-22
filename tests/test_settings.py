@@ -18,6 +18,7 @@ VALID_SETTINGS = """
 [Каталоги]
 Входные изображения = input ; комментарий после значения
 Готовые фотографии = result
+Итоговые фотографии = final
 
 [Сохранение]
 ; Формат = jpeg
@@ -66,6 +67,7 @@ def test_loads_operator_settings_and_ignores_comments(tmp_path: Path) -> None:
 
     assert result.detector_config.input_dir == (project_dir / "input").resolve()
     assert result.export_config.output_dir == (project_dir / "result").resolve()
+    assert result.final_directory == (project_dir / "final").resolve()
     assert result.export_config.output_format == "png"
     assert result.export_config.filename_prefix == "archive"
     assert result.export_config.filename_digits == 5

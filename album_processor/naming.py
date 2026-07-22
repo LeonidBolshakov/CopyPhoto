@@ -54,3 +54,30 @@ def output_path(config: ExportConfig, index: int) -> Path:
         config.filename_digits,
         config.file_extension,
     )
+
+
+def next_version_path(original_path: Path) -> Path:
+    """Сохранить свободное имя или добавить следующую версию при совпадении."""
+    if not original_path.parent.exists():
+        return original_path
+
+    siblings = [path for path in original_path.parent.iterdir() if path.is_file()]
+    if not any(
+        path.name.casefold() == original_path.name.casefold() for path in siblings
+    ):
+        return original_path
+
+    pattern = re.compile(
+        rf"^{re.escape(original_path.stem)}_(\d+){re.escape(original_path.suffix)}$",
+        re.IGNORECASE,
+    )
+    versions = [1]
+    for path in siblings:
+        match = pattern.fullmatch(path.name)
+        if match is not None:
+            versions.append(int(match.group(1)))
+
+    version = max(versions) + 1
+    return original_path.with_name(
+        f"{original_path.stem}_{version}{original_path.suffix}"
+    )

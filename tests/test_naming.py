@@ -8,6 +8,7 @@ from album_processor.config import ExportConfig
 from album_processor.naming import (
     find_next_output_index,
     format_output_name,
+    next_version_path,
     output_path,
 )
 
@@ -83,3 +84,20 @@ def test_png_numbering_is_independent_from_jpeg(tmp_path: Path) -> None:
 
     assert find_next_output_index(config) == 4
     assert output_path(config, 4) == tmp_path / "scan_0004.png"
+
+
+def test_version_path_preserves_free_name(tmp_path: Path) -> None:
+    original = tmp_path / "photo_0001.jpg"
+
+    assert next_version_path(original) == original
+
+
+def test_version_path_continues_versions_of_same_name(tmp_path: Path) -> None:
+    (tmp_path / "photo_0001.jpg").touch()
+    (tmp_path / "photo_0001_2.jpg").touch()
+    (tmp_path / "photo_0001_4.jpg").touch()
+    (tmp_path / "photo_0002_9.jpg").touch()
+
+    assert next_version_path(tmp_path / "photo_0001.jpg") == (
+        tmp_path / "photo_0001_5.jpg"
+    )

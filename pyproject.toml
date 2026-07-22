@@ -9,6 +9,13 @@ license-files = ["LICENSE"]
 authors = [
     { name = "Leonid Bolshakov" },
 ]
+dependencies = [
+    "numpy==2.5.1",
+    "opencv-python-headless==5.0.0.93",
+    "Pillow==12.3.0",
+    "pillow-heif==1.4.0",
+    "PyQt6==6.11.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/LeonidBolshakov/CopyPhoto"

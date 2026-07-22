@@ -41,6 +41,7 @@ class ApplicationSettings:
     enhancer_config: EnhancerConfig
     export_config: ExportConfig
     diagnostics_config: DiagnosticsConfig
+    final_directory: Path
 
 
 def _required_value(
@@ -141,8 +142,8 @@ def _read_parser(path: Path) -> configparser.ConfigParser:
 def _load_directories(
     parser: configparser.ConfigParser,
     project_dir: Path,
-) -> tuple[Path, Path]:
-    """Загрузить входной и выходной каталоги из раздела «Каталоги»."""
+) -> tuple[Path, Path, Path]:
+    """Загрузить рабочие каталоги из раздела «Каталоги»."""
     input_dir = _directory_value(
         parser,
         "Каталоги",
@@ -155,7 +156,13 @@ def _load_directories(
         "Готовые фотографии",
         project_dir,
     )
-    return input_dir, output_dir
+    final_dir = _directory_value(
+        parser,
+        "Каталоги",
+        "Итоговые фотографии",
+        project_dir,
+    )
+    return input_dir, output_dir, final_dir
 
 
 def _load_export_config(
@@ -250,7 +257,7 @@ def load_settings(
 ) -> ApplicationSettings:
     """Загрузить settings.ini и построить проверенные конфигурации приложения."""
     parser = _read_parser(path)
-    input_dir, output_dir = _load_directories(parser, project_dir)
+    input_dir, output_dir, final_dir = _load_directories(parser, project_dir)
     export_config = _load_export_config(parser, output_dir)
     cropper_config, enhancer_config = _load_processing_configs(parser)
     diagnostics_config = _load_diagnostics_config(parser, project_dir)
@@ -261,4 +268,5 @@ def load_settings(
         enhancer_config=enhancer_config,
         export_config=export_config,
         diagnostics_config=diagnostics_config,
+        final_directory=final_dir,
     )

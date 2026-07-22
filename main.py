@@ -75,6 +75,7 @@ def _print_application_settings(settings: ApplicationSettings) -> None:
     print(f"Настройки:      {SETTINGS_PATH}")
     print(f"Входная папка:  {detector_config.input_dir}")
     print(f"Результаты:     {export_config.output_dir}")
+    print(f"Итоговые:       {settings.final_directory}")
     if diagnostics_config.enabled:
         print(f"Диагностика:    включена, {diagnostics_config.output_dir}")
     else:
