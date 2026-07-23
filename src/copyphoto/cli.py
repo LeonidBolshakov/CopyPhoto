@@ -1,12 +1,12 @@
 """Консольный интерфейс CopyPhoto и форматирование отчётов обработки."""
 
-from album_processor.config import EnhancementMode
-from album_processor.processor import (
+from copyphoto.album_processor.config import EnhancementMode
+from copyphoto.album_processor.processor import (
     AlbumProcessor,
     BatchSummary,
     SourceProcessingReport,
 )
-from album_processor.settings import (
+from copyphoto.album_processor.settings import (
     ApplicationSettings,
     SETTINGS_PATH,
     SettingsError,

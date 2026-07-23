@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "copy-photo"
 version = "0.1.0"
@@ -17,18 +21,30 @@ dependencies = [
     "PyQt6==6.11.0",
 ]
 
+[project.scripts]
+copyphoto = "copyphoto.cli:main"
+
+[project.gui-scripts]
+copyphoto-gui = "copyphoto.gui.main:main"
+
 [project.urls]
 Homepage = "https://github.com/LeonidBolshakov/CopyPhoto"
 Repository = "https://github.com/LeonidBolshakov/CopyPhoto"
 Releases = "https://github.com/LeonidBolshakov/CopyPhoto/releases"
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"copyphoto.gui" = ["settings_form.ui"]
 
 [tool.mypy]
 python_version = "3.14"
 warn_unused_configs = true
+exclude = "^(build|dist)/"
 
 [[tool.mypy.overrides]]
 module = ["pillow_heif"]

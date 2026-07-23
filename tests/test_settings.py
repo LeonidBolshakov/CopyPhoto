@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-import album_processor.settings as settings_module
-from album_processor.config import EnhancementMode
-from album_processor.settings import SettingsError, _application_dir, load_settings
+import copyphoto.album_processor.settings as settings_module
+from copyphoto.album_processor.config import EnhancementMode
+from copyphoto.album_processor.settings import SettingsError, _application_dir, load_settings
 
 
 VALID_SETTINGS = """
@@ -43,7 +43,10 @@ def write_settings(path: Path, content: str = VALID_SETTINGS) -> None:
 
 
 def test_source_run_uses_project_directory() -> None:
-    assert _application_dir() == Path(settings_module.__file__).resolve().parent.parent
+    project_dir = Path(settings_module.__file__).resolve().parents[3]
+
+    assert (project_dir / "pyproject.toml").is_file()
+    assert _application_dir() == project_dir
 
 
 def test_exe_run_uses_executable_directory(

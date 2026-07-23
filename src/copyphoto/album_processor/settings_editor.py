@@ -8,8 +8,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from album_processor.config import EnhancementMode
-from album_processor.settings import SettingsError, _read_parser, load_settings
+from copyphoto.album_processor.config import EnhancementMode
+from copyphoto.album_processor.settings import SettingsError, _read_parser, load_settings
 
 
 @dataclass(frozen=True, slots=True)

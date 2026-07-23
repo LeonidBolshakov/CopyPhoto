@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from album_processor.config import ExportConfig
-from album_processor.naming import (
+from copyphoto.album_processor.config import ExportConfig
+from copyphoto.album_processor.naming import (
     find_next_output_index,
     format_output_name,
     next_version_path,

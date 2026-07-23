@@ -6,17 +6,17 @@ import cv2
 import numpy as np
 import pytest
 
-import album_processor.processor as processor_module
-from album_processor.batch import process_input_directory
-from album_processor.config import (
+import copyphoto.album_processor.processor as processor_module
+from copyphoto.album_processor.batch import process_input_directory
+from copyphoto.album_processor.config import (
     DetectorConfig,
     DiagnosticsConfig,
     EnhancementMode,
     EnhancerConfig,
     ExportConfig,
 )
-from album_processor.image_io import read_image, write_image
-from album_processor.processor import AlbumProcessor
+from copyphoto.album_processor.image_io import read_image, write_image
+from copyphoto.album_processor.processor import AlbumProcessor
 
 
 def make_detector_config(tmp_path: Path) -> DetectorConfig:

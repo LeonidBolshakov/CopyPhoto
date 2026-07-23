@@ -6,21 +6,21 @@ from typing import cast
 
 import pytest
 
-import copyphoto_cli as main_module
-from album_processor.detector import (
+import copyphoto.cli as main_module
+from copyphoto.album_processor.detector import (
     ContourRejectionReason,
     DetectionWarning,
     DetectionWarningCode,
 )
-from album_processor.config import DiagnosticsConfig
-from album_processor.processor import (
+from copyphoto.album_processor.config import DiagnosticsConfig
+from copyphoto.album_processor.processor import (
     AlbumProcessor,
     BatchSummary,
     RejectionCount,
     SourceProcessingReport,
 )
-from album_processor.settings import ApplicationSettings, SettingsError
-from copyphoto_cli import _print_source_report
+from copyphoto.album_processor.settings import ApplicationSettings, SettingsError
+from copyphoto.cli import _print_source_report
 
 
 def test_console_report_explains_rejections_and_warnings(

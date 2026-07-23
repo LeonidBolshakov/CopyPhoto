@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from album_processor.config import (
+from copyphoto.album_processor.config import (
     DEFAULT_CROPPER_CONFIG,
     DEFAULT_ENHANCER_CONFIG,
     CropperConfig,
@@ -11,7 +11,7 @@ from album_processor.config import (
     EnhancerConfig,
     ExportConfig,
 )
-from album_processor.processor import AlbumProcessor, BatchSummary
+from copyphoto.album_processor.processor import AlbumProcessor, BatchSummary
 
 
 def process_input_directory(

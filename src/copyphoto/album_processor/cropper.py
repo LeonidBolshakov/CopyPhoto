@@ -8,9 +8,9 @@ from math import ceil, floor
 import cv2
 import numpy as np
 
-from album_processor.config import DEFAULT_CROPPER_CONFIG, CropperConfig
-from album_processor.detector import PhotoDetection
-from album_processor.image_validation import validate_bgr_image
+from copyphoto.album_processor.config import DEFAULT_CROPPER_CONFIG, CropperConfig
+from copyphoto.album_processor.detector import PhotoDetection
+from copyphoto.album_processor.image_validation import validate_bgr_image
 
 
 def _source_patch(

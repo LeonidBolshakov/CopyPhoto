@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 
-from album_processor.config import (
+from copyphoto.album_processor.config import (
     CropperConfig,
     DetectorConfig,
     DiagnosticsConfig,

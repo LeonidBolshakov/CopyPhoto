@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from album_processor.config import EnhancementMode, EnhancerConfig
-from album_processor.enhancer import enhance_photo
+from copyphoto.album_processor.config import EnhancementMode, EnhancerConfig
+from copyphoto.album_processor.enhancer import enhance_photo
 
 
 def make_low_contrast_image() -> np.ndarray:

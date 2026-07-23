@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from album_processor.image_io import iter_source_images
+from copyphoto.album_processor.image_io import iter_source_images
 
 
 class ImagePreview(QLabel):

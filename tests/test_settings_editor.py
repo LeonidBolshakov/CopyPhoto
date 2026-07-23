@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from album_processor.settings import SettingsError, load_settings
-from album_processor.settings_editor import (
+from copyphoto.album_processor.settings import SettingsError, load_settings
+from copyphoto.album_processor.settings_editor import (
     DEFAULT_OPERATOR_SETTINGS,
     OperatorSettings,
     read_operator_settings,

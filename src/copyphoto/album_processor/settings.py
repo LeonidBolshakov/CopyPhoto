@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from album_processor.config import (
+from copyphoto.album_processor.config import (
     CropperConfig,
     DetectorConfig,
     DiagnosticsConfig,
@@ -18,10 +18,13 @@ from album_processor.config import (
 
 
 def _application_dir() -> Path:
-    """Вернуть каталог исходного проекта или запущенного EXE-файла."""
+    """Вернуть каталог EXE, исходного проекта или текущий рабочий каталог."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent.parent
+    for directory in Path(__file__).resolve().parents:
+        if (directory / "pyproject.toml").is_file():
+            return directory
+    return Path.cwd().resolve()
 
 
 APPLICATION_DIR = _application_dir()

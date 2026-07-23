@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from album_processor.config import ExportConfig
+from copyphoto.album_processor.config import ExportConfig
 
 
 def format_output_name(

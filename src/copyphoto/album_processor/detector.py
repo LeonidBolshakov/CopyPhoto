@@ -9,8 +9,8 @@ from math import atan2, degrees
 import cv2
 import numpy as np
 
-from album_processor.config import DetectorConfig
-from album_processor.image_validation import validate_bgr_image
+from copyphoto.album_processor.config import DetectorConfig
+from copyphoto.album_processor.image_validation import validate_bgr_image
 
 
 @dataclass(frozen=True, slots=True)

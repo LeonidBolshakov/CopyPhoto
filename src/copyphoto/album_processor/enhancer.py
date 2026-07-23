@@ -5,12 +5,12 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from album_processor.config import (
+from copyphoto.album_processor.config import (
     DEFAULT_ENHANCER_CONFIG,
     EnhancementMode,
     EnhancerConfig,
 )
-from album_processor.image_validation import validate_bgr_image
+from copyphoto.album_processor.image_validation import validate_bgr_image
 
 
 def _soft_enhancement(image: np.ndarray, config: EnhancerConfig) -> np.ndarray:

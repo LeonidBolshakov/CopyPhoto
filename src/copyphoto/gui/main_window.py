@@ -29,17 +29,17 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from album_processor.image_io import SUPPORTED_EXTENSIONS
-from album_processor.naming import next_version_path
-from album_processor.settings import APPLICATION_DIR, SETTINGS_PATH, SettingsError
-from album_processor.settings_editor import (
+from copyphoto.album_processor.image_io import SUPPORTED_EXTENSIONS
+from copyphoto.album_processor.naming import next_version_path
+from copyphoto.album_processor.settings import APPLICATION_DIR, SETTINGS_PATH, SettingsError
+from copyphoto.album_processor.settings_editor import (
     DEFAULT_OPERATOR_SETTINGS,
     read_operator_settings,
     replace_invalid_text_with_defaults,
     save_operator_settings,
 )
-from copyphoto_gui.directory_widget import DirectoryWidget
-from copyphoto_gui.settings_widget import SettingsWidget
+from copyphoto.gui.directory_widget import DirectoryWidget
+from copyphoto.gui.settings_widget import SettingsWidget
 
 
 APP_TITLE = "CopyPhoto"
@@ -79,7 +79,7 @@ class ProcessingWorker(QObject):
         """Выполнить консольную обработку и передать вывод и код завершения."""
         from contextlib import redirect_stderr, redirect_stdout
 
-        from copyphoto_cli import main as console_main
+        from copyphoto.cli import main as console_main
 
         stream = _SignalStream(self.output)
         try:
@@ -245,7 +245,7 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _load_validated_settings():
         """Загрузить и проверить настройки относительно каталога приложения."""
-        from album_processor.settings import load_settings
+        from copyphoto.album_processor.settings import load_settings
 
         return load_settings(SETTINGS_PATH, APPLICATION_DIR)
 

@@ -16,6 +16,9 @@ from PyInstaller.utils.win32.versioninfo import (
 
 
 project_path = Path(SPECPATH) / "pyproject.toml"
+source_path = Path(SPECPATH) / "src"
+gui_entry_path = source_path / "copyphoto" / "gui" / "__main__.py"
+settings_form_path = source_path / "copyphoto" / "gui" / "settings_form.ui"
 with project_path.open("rb") as stream:
     project = tomllib.load(stream)["project"]
 
@@ -69,11 +72,11 @@ version_info = VSVersionInfo(
 
 
 analysis = Analysis(
-    ["gui.py"],
-    pathex=[],
+    [str(gui_entry_path)],
+    pathex=[str(source_path)],
     binaries=[],
     # settings.ini остаётся внешним; Qt Designer-форма входит в EXE.
-    datas=[("settings_form.ui", ".")],
+    datas=[(str(settings_form_path), "copyphoto/gui")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

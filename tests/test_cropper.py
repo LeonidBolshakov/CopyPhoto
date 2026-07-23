@@ -6,9 +6,9 @@ import cv2
 import numpy as np
 from pytest import MonkeyPatch
 
-from album_processor.config import DEFAULT_CROPPER_CONFIG, CropperConfig
-from album_processor.cropper import crop_photo, crop_photos
-from album_processor.detector import PhotoDetection
+from copyphoto.album_processor.config import DEFAULT_CROPPER_CONFIG, CropperConfig
+from copyphoto.album_processor.cropper import crop_photo, crop_photos
+from copyphoto.album_processor.detector import PhotoDetection
 
 
 BACKGROUND = (24, 31, 38)

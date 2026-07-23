@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from album_processor.config import (
+from copyphoto.album_processor.config import (
     DEFAULT_CROPPER_CONFIG,
     DEFAULT_ENHANCER_CONFIG,
     CropperConfig,
@@ -17,17 +17,17 @@ from album_processor.config import (
     EnhancerConfig,
     ExportConfig,
 )
-from album_processor.cropper import crop_photo
-from album_processor.detector import (
+from copyphoto.album_processor.cropper import crop_photo
+from copyphoto.album_processor.detector import (
     ContourRejection,
     ContourRejectionReason,
     DetectionResult,
     DetectionWarning,
     detect_photos,
 )
-from album_processor.enhancer import enhance_photo
-from album_processor.image_io import iter_source_images, read_image, write_image
-from album_processor.naming import find_next_output_index, output_path
+from copyphoto.album_processor.enhancer import enhance_photo
+from copyphoto.album_processor.image_io import iter_source_images, read_image, write_image
+from copyphoto.album_processor.naming import find_next_output_index, output_path
 
 
 @dataclass(frozen=True, slots=True)

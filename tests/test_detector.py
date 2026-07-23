@@ -5,8 +5,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from album_processor.config import DetectorConfig
-from album_processor.detector import (
+from copyphoto.album_processor.config import DetectorConfig
+from copyphoto.album_processor.detector import (
     ContourRejectionReason,
     DetectionWarningCode,
     detect_photos,

@@ -12,9 +12,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication, QDialogButtonBox, QFileDialog
 
-import copyphoto_gui.main_window as main_window_module
-from album_processor.settings_editor import read_operator_settings
-from gui import DirectoryWidget, MainWindow, SettingsWidget
+import copyphoto.gui.main_window as main_window_module
+from copyphoto.album_processor.settings_editor import read_operator_settings
+from copyphoto.gui import DirectoryWidget, MainWindow, SettingsWidget
 
 
 SETTINGS_TEXT = """[Каталоги]

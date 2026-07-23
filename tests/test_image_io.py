@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from album_processor.image_io import iter_source_images, read_image, write_image
+from copyphoto.album_processor.image_io import iter_source_images, read_image, write_image
 
 
 def test_unicode_round_trip_and_source_filtering(tmp_path: Path) -> None:

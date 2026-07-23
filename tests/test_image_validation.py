@@ -5,7 +5,7 @@ from typing import cast
 import numpy as np
 import pytest
 
-from album_processor.image_validation import validate_bgr_image
+from copyphoto.album_processor.image_validation import validate_bgr_image
 
 
 def test_accepts_nonempty_three_channel_uint8_image() -> None:
