@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
-import shutil
 from datetime import datetime
 from importlib.resources import as_file, files
-from io import TextIOBase
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from PyQt6 import uic
 from PyQt6.QtCore import (
-    QObject,
     QThread,
-    QTimer,
-    pyqtSignal,
     pyqtSlot,
 )
 from PyQt6.QtGui import QCloseEvent
@@ -28,16 +23,26 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from copyphoto.album_processor.image_io import SUPPORTED_EXTENSIONS
-from copyphoto.album_processor.naming import next_version_path
-from copyphoto.album_processor.settings import APPLICATION_DIR, SETTINGS_PATH, SettingsError
+from copyphoto.album_processor.settings import (
+    APPLICATION_DIR,
+    SETTINGS_PATH,
+    ApplicationSettings,
+    SettingsError,
+    load_settings,
+)
 from copyphoto.album_processor.settings_editor import (
     DEFAULT_OPERATOR_SETTINGS,
     read_operator_settings,
     replace_invalid_text_with_defaults,
     save_operator_settings,
 )
+from copyphoto.file_transfer import (
+    TransferResult,
+    move_files_to_final,
+    transfer_prefix,
+)
 from copyphoto.gui.directory_widget import DirectoryWidget
+from copyphoto.gui.processing_worker import ProcessingWorker
 from copyphoto.gui.settings_widget import SettingsWidget
 
 
@@ -45,54 +50,6 @@ APP_TITLE = "CopyPhoto"
 MAIN_WINDOW_FORM_NAME = "main_window.ui"
 MAIN_WINDOW_FORM = files("copyphoto.gui").joinpath(MAIN_WINDOW_FORM_NAME)
 _WidgetT = TypeVar("_WidgetT", bound=QWidget)
-
-
-class _SignalStream(TextIOBase):
-    """Текстовый поток, отправляющий готовые строки через Qt-сигнал."""
-
-    def __init__(self, output: Any) -> None:
-        """Сохранить Qt-сигнал назначения и создать пустой буфер строки."""
-        self._output = output
-        self._buffer = ""
-
-    def write(self, text: str) -> int:
-        """Добавить текст в буфер и отправить каждую завершённую строку."""
-        self._buffer += text
-        while "\n" in self._buffer:
-            line, self._buffer = self._buffer.split("\n", 1)
-            self._output.emit(line.rstrip("\r"))
-        return len(text)
-
-    def flush(self) -> None:
-        """Отправить оставшийся незавершённый текст и очистить буфер."""
-        if self._buffer:
-            self._output.emit(self._buffer)
-            self._buffer = ""
-
-
-class ProcessingWorker(QObject):
-    """Запуск консольной обработки вне потока интерфейса."""
-
-    output = pyqtSignal(str)
-    finished = pyqtSignal(int)
-
-    @pyqtSlot()
-    def run(self) -> None:
-        """Выполнить консольную обработку и передать вывод и код завершения."""
-        from contextlib import redirect_stderr, redirect_stdout
-
-        from copyphoto.cli import main as console_main
-
-        stream = _SignalStream(self.output)
-        try:
-            with redirect_stdout(stream), redirect_stderr(stream):
-                exit_code = console_main()
-        except Exception as error:  # Защита GUI от необработанной ошибки ядра.
-            self.output.emit(f"НЕОБРАБОТАННАЯ ОШИБКА: {error}")
-            exit_code = 1
-        finally:
-            stream.flush()
-        self.finished.emit(exit_code)
 
 
 class MainWindow(QMainWindow):
@@ -103,12 +60,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._thread: QThread | None = None
         self._worker: ProcessingWorker | None = None
-        self._settings_dirty = False
         self._last_settings_error = ""
         self._load_form()
         self._configure_directory_widgets()
         self._connect_form_actions()
-        self._configure_status_and_auto_save()
+        self._configure_status_bar()
         self._load_settings_from_disk()
 
     def _load_form(self) -> None:
@@ -134,29 +90,26 @@ class MainWindow(QMainWindow):
         widget = self.findChild(widget_type, name)
         if widget is None:
             raise RuntimeError(
-                f"в форме {MAIN_WINDOW_FORM_NAME} отсутствует {name}"
+                f"в форме {MAIN_WINDOW_FORM_NAME} отсутствует объект "
+                f"{widget_type.__name__} с objectName={name!r}"
             )
         return widget
 
     def _configure_directory_widgets(self) -> None:
         """Назначить файловым вкладкам тексты, ограничения и действия."""
-        self.input_files.configure("Во входном каталоге нет изображений")
-        self.output_files.configure("В каталоге результатов нет изображений")
+        self.input_files.configure(
+            "Во входном каталоге нет изображений",
+            move_to_final=lambda: self._confirm_move_to_final("input"),
+        )
+        self.output_files.configure(
+            "В каталоге результатов нет изображений",
+            move_to_final=lambda: self._confirm_move_to_final("output"),
+        )
         self.final_files.configure(
             "В итоговом каталоге нет изображений", allow_cleanup=False
         )
         self.diagnostic_files.configure(
             "В диагностическом каталоге нет изображений"
-        )
-        self.input_select_all_button = self.input_files.add_select_all_action()
-        self.input_move_to_final_button = self.input_files.add_header_action(
-            "В итоговые…",
-            lambda: self._confirm_move_to_final("input"),
-        )
-        self.output_select_all_button = self.output_files.add_select_all_action()
-        self.output_move_to_final_button = self.output_files.add_header_action(
-            "В итоговые…",
-            lambda: self._confirm_move_to_final("output"),
         )
 
     def _connect_form_actions(self) -> None:
@@ -165,48 +118,40 @@ class MainWindow(QMainWindow):
         self.run_button.clicked.connect(self.start_processing)
         self.clear_log_button.clicked.connect(self._clear_log)
         self.save_log_button.clicked.connect(self._save_log)
-        self.settings_widget.settings_changed.connect(self._schedule_auto_save)
+        self.settings_widget.settings_changed.connect(self._save_changed_settings)
 
-    def _configure_status_and_auto_save(self) -> None:
-        """Настроить строку состояния и таймер сохранения настроек."""
+    def _configure_status_bar(self) -> None:
+        """Настроить строку состояния главного окна."""
         status_bar = self.statusBar()
         assert status_bar is not None
         self.status_bar = status_bar
         self.status_bar.showMessage(f"Настройки: {SETTINGS_PATH}")
 
-        self._auto_save_timer = QTimer(self)
-        self._auto_save_timer.setSingleShot(True)
-        self._auto_save_timer.setInterval(500)
-        self._auto_save_timer.timeout.connect(self._auto_save)
-
     def _load_settings_from_disk(self) -> None:
         """Загрузить настройки в форму и назначить каталоги файловым вкладкам."""
         try:
             editor_settings = read_operator_settings(SETTINGS_PATH)
-            application_settings = self._load_validated_settings()
+            application_settings = load_settings(SETTINGS_PATH, APPLICATION_DIR)
         except SettingsError as error:
+            self._last_settings_error = str(error)
             self._show_error("Не удалось загрузить настройки", str(error))
             return
-
         self.settings_widget.set_settings(editor_settings)
+        self._last_settings_error = ""
+        self._apply_directory_paths(application_settings)
+
+    def _apply_directory_paths(self, settings: ApplicationSettings) -> None:
+        """Назначить файловым вкладкам каталоги из проверенных настроек."""
         self.input_files.set_directory(
-            application_settings.detector_config.input_dir
+            settings.detector_config.input_dir
         )
         self.output_files.set_directory(
-            application_settings.export_config.output_dir
+            settings.export_config.output_dir
         )
-        self.final_files.set_directory(application_settings.final_directory)
+        self.final_files.set_directory(settings.final_directory)
         self.diagnostic_files.set_directory(
-            application_settings.diagnostics_config.output_dir
+            settings.diagnostics_config.output_dir
         )
-        self._settings_dirty = False
-
-    @staticmethod
-    def _load_validated_settings():
-        """Загрузить и проверить настройки относительно каталога приложения."""
-        from copyphoto.album_processor.settings import load_settings
-
-        return load_settings(SETTINGS_PATH, APPLICATION_DIR)
 
     def save_settings(
         self,
@@ -221,6 +166,7 @@ class MainWindow(QMainWindow):
                 self.settings_widget.settings(),
                 APPLICATION_DIR,
             )
+            application_settings = load_settings(SETTINGS_PATH, APPLICATION_DIR)
         except SettingsError as error:
             self._last_settings_error = str(error)
             if show_error:
@@ -231,37 +177,15 @@ class MainWindow(QMainWindow):
                 )
             return False
         self._last_settings_error = ""
-        self._settings_dirty = False
-        self._refresh_directory_paths()
+        self._apply_directory_paths(application_settings)
         if show_success:
             self.status_bar.showMessage("Настройки сохранены автоматически", 3000)
         return True
 
     @pyqtSlot()
-    def _schedule_auto_save(self) -> None:
-        """Отметить настройки изменёнными и отложить автоматическое сохранение."""
-        self._settings_dirty = True
-        self.status_bar.showMessage("Сохранение настроек…")
-        self._auto_save_timer.start()
-
-    @pyqtSlot()
-    def _auto_save(self) -> None:
-        """Сохранить настройки, если после последней записи они изменились."""
-        if self._settings_dirty:
-            self.save_settings(show_success=True, show_error=False)
-
-    def _refresh_directory_paths(self) -> None:
-        """Обновить каталоги файловых вкладок по сохранённым настройкам."""
-        try:
-            settings = self._load_validated_settings()
-        except SettingsError:
-            return
-        self.input_files.set_directory(settings.detector_config.input_dir)
-        self.output_files.set_directory(settings.export_config.output_dir)
-        self.final_files.set_directory(settings.final_directory)
-        self.diagnostic_files.set_directory(
-            settings.diagnostics_config.output_dir
-        )
+    def _save_changed_settings(self) -> None:
+        """Сразу проверить и сохранить законченное изменение формы."""
+        self.save_settings(show_success=True, show_error=False)
 
     def restore_defaults(self) -> None:
         """Запросить подтверждение восстановления стандартных настроек."""
@@ -285,9 +209,7 @@ class MainWindow(QMainWindow):
 
     def _apply_defaults(self) -> None:
         """Установить стандартные значения и сразу записать их."""
-        self._auto_save_timer.stop()
         self.settings_widget.set_settings(DEFAULT_OPERATOR_SETTINGS)
-        self._settings_dirty = True
         self.save_settings(show_success=True, show_error=True)
 
     def _confirm_move_to_final(self, source_kind: str) -> None:
@@ -323,12 +245,12 @@ class MainWindow(QMainWindow):
         ):
             return
 
-        moved, failures = self._move_files_to_final(
+        result = move_files_to_final(
             sources,
             source_directory,
             final_directory,
             (
-                self._transfer_prefix(prefix_letter, datetime.now())
+                transfer_prefix(prefix_letter, datetime.now())
                 if prefix_letter
                 else ""
             ),
@@ -336,7 +258,7 @@ class MainWindow(QMainWindow):
         )
         source_widget.refresh()
         self.final_files.refresh()
-        self._show_move_result(moved, failures)
+        self._show_move_result(result)
 
     def _move_source_context(
         self,
@@ -349,7 +271,7 @@ class MainWindow(QMainWindow):
 
     def _move_directories(self, source_kind: str) -> tuple[Path, Path]:
         """Получить проверенные исходный и итоговый каталоги переноса."""
-        settings = self._load_validated_settings()
+        settings = load_settings(SETTINGS_PATH, APPLICATION_DIR)
         source_directory = (
             settings.detector_config.input_dir.resolve()
             if source_kind == "input"
@@ -391,80 +313,28 @@ class MainWindow(QMainWindow):
         dialog.exec()
         return dialog.clickedButton() is move_button
 
-    def _show_move_result(self, moved: int, failures: list[str]) -> None:
+    def _show_move_result(self, result: TransferResult) -> None:
         """Показать итог полного или частичного переноса фотографий."""
-        if failures:
-            descriptions = "\n".join(failures[:5])
-            if len(failures) > 5:
-                descriptions += f"\n…и ещё {len(failures) - 5}"
+        if result.failures:
+            descriptions = "\n".join(result.failures[:5])
+            if len(result.failures) > 5:
+                descriptions += f"\n…и ещё {len(result.failures) - 5}"
             self._show_message(
                 QMessageBox.Icon.Warning,
                 "Перенос завершён не полностью",
-                f"Перемещено: {moved}.\n\n{descriptions}",
+                f"Перемещено: {result.moved}.\n\n{descriptions}",
             )
         else:
             self._show_message(
                 QMessageBox.Icon.Information,
                 "Фотографии перемещены",
-                f"Перемещено в итоговый каталог: {moved}.",
+                f"Перемещено в итоговый каталог: {result.moved}.",
             )
-
-    @staticmethod
-    def _transfer_prefix(source_letter: str, started_at: datetime) -> str:
-        """Сформировать общий префикс источника и начала переноса."""
-        return f"{source_letter}{started_at:%y-%m-%d-%H-%M}_"
-
-    @staticmethod
-    def _move_files_to_final(
-        sources: list[Path],
-        source_directory: Path,
-        final_directory: Path,
-        transfer_prefix: str,
-        version_collisions: bool = False,
-    ) -> tuple[int, list[str]]:
-        """Без перезаписи переместить выбранные файлы между каталогами."""
-        failures: list[str] = []
-        moved = 0
-        try:
-            final_directory.mkdir(parents=True, exist_ok=True)
-        except OSError as error:
-            return 0, [f"Не удалось создать итоговый каталог: {error}"]
-
-        for source in sources:
-            try:
-                if (
-                    source.parent.resolve() != source_directory
-                    or source.suffix.casefold() not in SUPPORTED_EXTENSIONS
-                    or not source.is_file()
-                ):
-                    failures.append(f"{source.name}: недопустимый исходный файл")
-                    continue
-                if (
-                    version_collisions
-                    and source.suffix.casefold() not in {".jpg", ".jpeg", ".png"}
-                ):
-                    failures.append(
-                        f"{source.name}: готовая фотография должна быть JPEG или PNG"
-                    )
-                    continue
-                if not version_collisions:
-                    target = final_directory / f"{transfer_prefix}{source.name}"
-                    if target.exists():
-                        failures.append(f"{target.name}: имя уже занято")
-                        continue
-                else:
-                    target = next_version_path(final_directory / source.name)
-                shutil.move(str(source), str(target))
-                moved += 1
-            except OSError as error:
-                failures.append(f"{source.name}: {error}")
-        return moved, failures
 
     def start_processing(self) -> None:
         """Сохранить настройки и запустить обработку в отдельном потоке Qt."""
         if self._thread is not None:
             return
-        self._auto_save_timer.stop()
         if not self.save_settings(show_success=False, show_error=True):
             return
 
@@ -497,8 +367,8 @@ class MainWindow(QMainWindow):
         self.input_files.set_cleanup_enabled(not processing)
         self.output_files.set_cleanup_enabled(not processing)
         self.diagnostic_files.set_cleanup_enabled(not processing)
-        self.input_move_to_final_button.setDisabled(processing)
-        self.output_move_to_final_button.setDisabled(processing)
+        self.input_files.move_to_final_button.setDisabled(processing)
+        self.output_files.move_to_final_button.setDisabled(processing)
         self.run_button.setText(
             "Обработка…" if processing else "Запустить обработку"
         )
@@ -609,7 +479,6 @@ class MainWindow(QMainWindow):
             self.settings_widget.settings()
         )
         self.settings_widget.set_settings(fallback)
-        self._settings_dirty = True
         self.save_settings(show_success=False, show_error=False)
         return True
 
@@ -632,8 +501,7 @@ class MainWindow(QMainWindow):
             dialog.exec()
             event.ignore()
             return
-        self._auto_save_timer.stop()
-        if self._settings_dirty and not self.save_settings(
+        if not self.save_settings(
             show_success=False,
             show_error=False,
         ):

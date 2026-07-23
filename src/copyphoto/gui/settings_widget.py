@@ -169,18 +169,18 @@ class SettingsWidget(QScrollArea):
     def _connect_change_signals(self) -> None:
         """Подключить изменяемые значения формы к общему сигналу настроек."""
         for signal in (
-            self.input_directory.textChanged,
-            self.output_directory.textChanged,
-            self.final_directory.textChanged,
+            self.input_directory.editingFinished,
+            self.output_directory.editingFinished,
+            self.final_directory.editingFinished,
             self.output_format.currentTextChanged,
-            self.filename_prefix.textChanged,
+            self.filename_prefix.editingFinished,
             self.filename_digits.valueChanged,
             self.jpeg_quality.valueChanged,
             self.rotate_portrait.toggled,
             self.enhancement_mode.currentTextChanged,
             self.enhancement_intensity.valueChanged,
             self.diagnostics_enabled.toggled,
-            self.diagnostics_directory.textChanged,
+            self.diagnostics_directory.editingFinished,
         ):
             signal.connect(self._emit_settings_changed)
 
@@ -193,7 +193,10 @@ class SettingsWidget(QScrollArea):
         """Найти обязательный элемент формы с проверкой его типа."""
         widget: _WidgetT | None = parent.findChild(widget_type, name)
         if widget is None:
-            raise RuntimeError(f"в settings_form.ui не найден элемент {name}")
+            raise RuntimeError(
+                f"в форме {SETTINGS_FORM_NAME} отсутствует объект "
+                f"{widget_type.__name__} с objectName={name!r}"
+            )
         return widget
 
     def _browse(self, field: QLineEdit) -> None:
@@ -207,6 +210,7 @@ class SettingsWidget(QScrollArea):
             selected = dialog.selectedFiles()
             if selected:
                 field.setText(selected[0])
+                self._emit_settings_changed()
 
     def _directory_dialog(self, initial: Path) -> QFileDialog:
         """Создать выбор каталога с видимым содержимым и русскими кнопками."""

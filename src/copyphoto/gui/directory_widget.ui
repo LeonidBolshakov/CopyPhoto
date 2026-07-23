@@ -13,17 +13,37 @@
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="refreshButton">
+     <widget class="QPushButton" name="refreshButton">
        <property name="toolTip">
         <string>Повторно прочитать содержимое каталога</string>
        </property>
        <property name="text">
         <string>Обновить список</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="clearButton">
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPushButton" name="selectAllButton">
+      <property name="visible">
+       <bool>false</bool>
+      </property>
+      <property name="text">
+       <string>Выделить все</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPushButton" name="moveToFinalButton">
+      <property name="visible">
+       <bool>false</bool>
+      </property>
+      <property name="text">
+       <string>В итоговые…</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPushButton" name="clearButton">
        <property name="text">
         <string>Очистить…</string>
        </property>

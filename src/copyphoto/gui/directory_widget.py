@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from importlib.resources import as_file, files
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from PIL import Image, ImageOps
 from PyQt6 import uic
 from PyQt6.QtCore import QFile, QObject, QSize, Qt
 from PyQt6.QtGui import QImage, QPixmap, QResizeEvent
 from PyQt6.QtWidgets import (
-    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -83,9 +83,12 @@ class DirectoryWidget(QWidget):
         self._empty_text = empty_text
         self._cleanup_allowed = allow_cleanup
         self._allow_cleanup = allow_cleanup
+        self._move_to_final: Callable[[], None] | None = None
         self._load_form()
         self.refresh_button.clicked.connect(self.refresh)
         self.clear_button.clicked.connect(self._confirm_cleanup)
+        self.select_all_button.clicked.connect(self.file_list.selectAll)
+        self.move_to_final_button.clicked.connect(self._request_move_to_final)
         self.clear_button.setVisible(allow_cleanup)
 
         self.file_list.currentItemChanged.connect(self._show_selected)
@@ -97,9 +100,10 @@ class DirectoryWidget(QWidget):
             loaded = uic.loadUi(str(form_path), self)
         if loaded is not self:
             raise RuntimeError(f"не удалось загрузить форму {DIRECTORY_FORM_NAME}")
-        self.header = self._find(QHBoxLayout, "headerLayout")
         self.path_label = self._find(QLabel, "pathLabel")
         self.refresh_button = self._find(QPushButton, "refreshButton")
+        self.select_all_button = self._find(QPushButton, "selectAllButton")
+        self.move_to_final_button = self._find(QPushButton, "moveToFinalButton")
         self.clear_button = self._find(QPushButton, "clearButton")
         self.file_list = self._find(QListWidget, "fileList")
         self.preview = self._find(ImagePreview, "preview")
@@ -111,27 +115,31 @@ class DirectoryWidget(QWidget):
         found = self.findChild(object_type, name)
         if found is None:
             raise RuntimeError(
-                f"в форме {DIRECTORY_FORM_NAME} отсутствует {name}"
+                f"в форме {DIRECTORY_FORM_NAME} отсутствует объект "
+                f"{object_type.__name__} с objectName={name!r}"
             )
         return found
 
-    def configure(self, empty_text: str, *, allow_cleanup: bool = True) -> None:
-        """Задать сообщение пустого каталога и доступность его очистки."""
+    def configure(
+        self,
+        empty_text: str,
+        *,
+        allow_cleanup: bool = True,
+        move_to_final: Callable[[], None] | None = None,
+    ) -> None:
+        """Задать текст, очистку и необязательные действия переноса."""
         self._empty_text = empty_text
         self._allow_cleanup = allow_cleanup
+        self._move_to_final = move_to_final
+        self.select_all_button.setVisible(move_to_final is not None)
+        self.move_to_final_button.setVisible(move_to_final is not None)
         self.clear_button.setVisible(allow_cleanup)
         self.set_cleanup_enabled(self._cleanup_allowed)
 
-    def add_header_action(self, text: str, callback: Any) -> QPushButton:
-        """Добавить действие над файлами перед кнопкой очистки."""
-        button = QPushButton(text)
-        button.clicked.connect(lambda: callback())
-        self.header.insertWidget(self.header.count() - 1, button)
-        return button
-
-    def add_select_all_action(self) -> QPushButton:
-        """Добавить кнопку выделения всех показанных изображений."""
-        return self.add_header_action("Выделить все", self.file_list.selectAll)
+    def _request_move_to_final(self) -> None:
+        """Вызвать назначенное вкладке действие переноса в итоговый каталог."""
+        if self._move_to_final is not None:
+            self._move_to_final()
 
     def selected_paths(self) -> list[Path]:
         """Вернуть выбранные в списке изображения."""
