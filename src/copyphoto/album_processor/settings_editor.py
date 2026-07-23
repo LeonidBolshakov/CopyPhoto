@@ -137,6 +137,33 @@ def _serialized_values(settings: OperatorSettings) -> dict[tuple[str, str], str]
 
 _SECTION_PATTERN = re.compile(r"^\s*\[([^]]+)]\s*(?:[;#].*)?$")
 _OPTION_PATTERN = re.compile(r"^(\s*)([^=:#]+?)(\s*)=(.*)$")
+_SettingKey = tuple[str, str]
+
+
+def _render_option_line(
+    line: str,
+    section: str,
+    replacements: dict[_SettingKey, str],
+) -> tuple[str, _SettingKey | None]:
+    """Обновить одну известную строку параметра и вернуть её ключ."""
+    content = line.rstrip("\r\n")
+    option_match = _OPTION_PATTERN.match(content)
+    if not option_match or content.lstrip().startswith((";", "#")):
+        return line, None
+
+    option = option_match.group(2).strip()
+    key = (section, option)
+    if key not in replacements:
+        return line, None
+
+    value = replacements[key]
+    if not value or any(character in value for character in "\r\n"):
+        raise SettingsError(f"параметр [{section}] «{option}» не может быть пустым")
+    inline_comment = re.search(r"(\s+[;#].*)$", option_match.group(4))
+    comment = inline_comment.group(1) if inline_comment else ""
+    newline = line[len(content) :]
+    rendered = f"{option_match.group(1)}{option} = {value}{comment}{newline}"
+    return rendered, key
 
 
 def render_operator_settings(source: str, settings: OperatorSettings) -> str:
@@ -148,33 +175,19 @@ def render_operator_settings(source: str, settings: OperatorSettings) -> str:
 
     for line in source.splitlines(keepends=True):
         content = line.rstrip("\r\n")
-        newline = line[len(content) :]
         section_match = _SECTION_PATTERN.match(content)
         if section_match:
             section = section_match.group(1).strip()
             rendered.append(line)
             continue
-
-        option_match = _OPTION_PATTERN.match(content)
-        if not option_match or content.lstrip().startswith((";", "#")):
-            rendered.append(line)
-            continue
-
-        option = option_match.group(2).strip()
-        key = (section, option)
-        if key not in replacements:
-            rendered.append(line)
-            continue
-
-        value = replacements[key]
-        if not value or any(character in value for character in "\r\n"):
-            raise SettingsError(f"параметр [{section}] «{option}» не может быть пустым")
-        inline_comment = re.search(r"(\s+[;#].*)$", option_match.group(4))
-        comment = inline_comment.group(1) if inline_comment else ""
-        rendered.append(
-            f"{option_match.group(1)}{option} = {value}{comment}{newline}"
+        rendered_line, replaced_key = _render_option_line(
+            line,
+            section,
+            replacements,
         )
-        missing.discard(key)
+        rendered.append(rendered_line)
+        if replaced_key is not None:
+            missing.discard(replaced_key)
 
     if missing:
         section, option = sorted(missing)[0]

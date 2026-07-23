@@ -213,7 +213,7 @@ class MainWindow(QMainWindow):
         self.save_settings(show_success=True, show_error=True)
 
     def _confirm_move_to_final(self, source_kind: str) -> None:
-        """Подтвердить перенос выбранных входных или готовых файлов в итоговые."""
+        """Проверить выбор, подтвердить перенос в итоговый каталог и выполнить его."""
         source_widget, source_title, prefix_letter = self._move_source_context(
             source_kind
         )
