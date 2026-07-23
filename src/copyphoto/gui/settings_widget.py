@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from importlib.resources import files
+from importlib.resources import as_file, files
 from pathlib import Path
 from typing import TypeVar
 
@@ -29,7 +29,8 @@ from copyphoto.album_processor.settings_editor import (
 
 
 _WidgetT = TypeVar("_WidgetT", bound=QWidget)
-SETTINGS_FORM_PATH = Path(str(files("copyphoto.gui").joinpath("settings_form.ui")))
+SETTINGS_FORM_NAME = "settings_form.ui"
+SETTINGS_FORM = files("copyphoto.gui").joinpath(SETTINGS_FORM_NAME)
 
 
 class SettingsWidget(QScrollArea):
@@ -54,9 +55,10 @@ class SettingsWidget(QScrollArea):
 
     def _load_form(self) -> QWidget:
         """Загрузить settings_form.ui, установить форму и вернуть корневой виджет."""
-        loaded = uic.loadUi(str(SETTINGS_FORM_PATH))
+        with as_file(SETTINGS_FORM) as form_path:
+            loaded = uic.loadUi(str(form_path))
         if not isinstance(loaded, QWidget):
-            raise RuntimeError(f"не удалось загрузить форму {SETTINGS_FORM_PATH}")
+            raise RuntimeError(f"не удалось загрузить форму {SETTINGS_FORM_NAME}")
         self.setWidget(loaded)
         return loaded
 

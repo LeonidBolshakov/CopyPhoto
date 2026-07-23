@@ -39,7 +39,11 @@ testpaths = ["tests"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"copyphoto.gui" = ["settings_form.ui"]
+"copyphoto.gui" = [
+    "directory_widget.ui",
+    "main_window.ui",
+    "settings_form.ui",
+]
 
 [tool.mypy]
 python_version = "3.14"

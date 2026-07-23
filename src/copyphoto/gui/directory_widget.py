@@ -2,45 +2,40 @@
 
 from __future__ import annotations
 
+from importlib.resources import as_file, files
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from PIL import Image, ImageOps
-from PyQt6.QtCore import QFile, QSize, Qt
+from PyQt6 import uic
+from PyQt6.QtCore import QFile, QObject, QSize, Qt
 from PyQt6.QtGui import QImage, QPixmap, QResizeEvent
 from PyQt6.QtWidgets import (
-    QAbstractItemView,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
     QSplitter,
-    QVBoxLayout,
     QWidget,
 )
 
 from copyphoto.album_processor.image_io import iter_source_images
 
 
+DIRECTORY_FORM_NAME = "directory_widget.ui"
+DIRECTORY_FORM = files("copyphoto.gui").joinpath(DIRECTORY_FORM_NAME)
+_ObjectT = TypeVar("_ObjectT", bound=QObject)
+
+
 class ImagePreview(QLabel):
     """Масштабируемая область предварительного просмотра изображения."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        """Настроить область масштабируемого предварительного просмотра."""
+        """Создать область и подготовить хранение исходного изображения."""
         super().__init__(parent)
         self._source_pixmap: QPixmap | None = None
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setMinimumSize(360, 280)
-        self.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Expanding,
-        )
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setText("Выберите изображение")
 
     def show_pixmap(self, pixmap: QPixmap) -> None:
         """Показать изображение, масштабировав его под текущий размер области."""
@@ -77,61 +72,55 @@ class DirectoryWidget(QWidget):
 
     def __init__(
         self,
-        empty_text: str,
         parent: QWidget | None = None,
         *,
+        empty_text: str = "В каталоге нет изображений",
         allow_cleanup: bool = True,
     ) -> None:
-        """Создать список файлов, предпросмотр и разрешённые действия каталога."""
+        """Загрузить форму просмотра каталога и настроить её поведение."""
         super().__init__(parent)
         self._directory = Path()
         self._empty_text = empty_text
         self._cleanup_allowed = allow_cleanup
         self._allow_cleanup = allow_cleanup
-
-        self.path_label = QLabel()
-        self.path_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-        refresh_button = QPushButton("Обновить список")
-        refresh_button.setToolTip("Повторно прочитать содержимое каталога")
-        refresh_button.clicked.connect(self.refresh)
-        self.clear_button = QPushButton("Очистить…")
+        self._load_form()
+        self.refresh_button.clicked.connect(self.refresh)
         self.clear_button.clicked.connect(self._confirm_cleanup)
-
-        self.header = QHBoxLayout()
-        self.header.addWidget(self.path_label, 1)
-        self.header.addWidget(refresh_button)
-        self.header.addWidget(self.clear_button)
         self.clear_button.setVisible(allow_cleanup)
 
-        self.file_list = QListWidget()
-        self.file_list.setMinimumWidth(260)
-        self.file_list.setSelectionMode(
-            QAbstractItemView.SelectionMode.ExtendedSelection
-        )
         self.file_list.currentItemChanged.connect(self._show_selected)
-        self.preview = ImagePreview()
-        self.details = QLabel()
-        self.details.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.details.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self.splitter.setStretchFactor(1, 1)
 
-        preview_column = QWidget()
-        preview_layout = QVBoxLayout(preview_column)
-        preview_layout.setContentsMargins(0, 0, 0, 0)
-        preview_layout.addWidget(self.preview, 1)
-        preview_layout.addWidget(self.details)
+    def _load_form(self) -> None:
+        """Загрузить directory_widget.ui и связать обязательные элементы."""
+        with as_file(DIRECTORY_FORM) as form_path:
+            loaded = uic.loadUi(str(form_path), self)
+        if loaded is not self:
+            raise RuntimeError(f"не удалось загрузить форму {DIRECTORY_FORM_NAME}")
+        self.header = self._find(QHBoxLayout, "headerLayout")
+        self.path_label = self._find(QLabel, "pathLabel")
+        self.refresh_button = self._find(QPushButton, "refreshButton")
+        self.clear_button = self._find(QPushButton, "clearButton")
+        self.file_list = self._find(QListWidget, "fileList")
+        self.preview = self._find(ImagePreview, "preview")
+        self.details = self._find(QLabel, "details")
+        self.splitter = self._find(QSplitter, "splitter")
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.file_list)
-        splitter.addWidget(preview_column)
-        splitter.setStretchFactor(1, 1)
+    def _find(self, object_type: type[_ObjectT], name: str) -> _ObjectT:
+        """Найти обязательный объект загруженной формы по имени."""
+        found = self.findChild(object_type, name)
+        if found is None:
+            raise RuntimeError(
+                f"в форме {DIRECTORY_FORM_NAME} отсутствует {name}"
+            )
+        return found
 
-        layout = QVBoxLayout(self)
-        layout.addLayout(self.header)
-        layout.addWidget(splitter, 1)
+    def configure(self, empty_text: str, *, allow_cleanup: bool = True) -> None:
+        """Задать сообщение пустого каталога и доступность его очистки."""
+        self._empty_text = empty_text
+        self._allow_cleanup = allow_cleanup
+        self.clear_button.setVisible(allow_cleanup)
+        self.set_cleanup_enabled(self._cleanup_allowed)
 
     def add_header_action(self, text: str, callback: Any) -> QPushButton:
         """Добавить действие над файлами перед кнопкой очистки."""

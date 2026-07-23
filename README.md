@@ -141,9 +141,11 @@ PNG.
 | `cli.py`                                       | Консольное представление настроек и структурированного отчёта                     |
 | `gui/__main__.py`                              | Точка входа `python -m copyphoto.gui`                                              |
 | `gui/main.py`                                  | Создание `QApplication` и запуск графического интерфейса                           |
-| `gui/main_window.py`                           | Главное окно, журнал, перенос файлов и фоновый запуск обработки                    |
+| `gui/main_window.py`                           | Логика главного окна, перенос файлов и фоновый запуск обработки                    |
+| `gui/main_window.ui`                           | Компоновка главного окна, вкладок, журнала и общие стили                            |
 | `gui/settings_widget.py`                       | Связь формы настроек с операторскими значениями                                   |
 | `gui/directory_widget.py`                      | Список, предпросмотр и безопасная очистка каталогов изображений                   |
+| `gui/directory_widget.ui`                      | Компоновка списка файлов и области предварительного просмотра                      |
 | `gui/settings_form.ui`                         | Редактируемая в Qt Designer форма операторских настроек                           |
 
 Для программного запуска используется класс:
@@ -253,7 +255,8 @@ summary = AlbumProcessor(
 .\dist\CopyPhoto.exe
 ```
 
-Файл `CopyPhoto.spec` включает в EXE форму
+Файл `CopyPhoto.spec` включает в EXE формы `src/copyphoto/gui/main_window.ui`,
+`src/copyphoto/gui/directory_widget.ui` и
 `src/copyphoto/gui/settings_form.ui`, но не включает операторский
 `settings.ini`. Скрипт после сборки копирует INI в `dist` как обычный внешний
 файл, поэтому параметры можно менять без повторной сборки.

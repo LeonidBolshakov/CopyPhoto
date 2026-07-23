@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>980</width>
+    <height>840</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>800</width>
+    <height>700</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>CopyPhoto</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QMainWindow { background: #f4f6f8; }
+QWidget { font-family: "Segoe UI"; font-size: 10pt; color: #20242a; }
+QLabel#applicationTitle { font-size: 22pt; font-weight: 650; color: #17212b; }
+QLabel#applicationSubtitle { color: #647181; padding-top: 2px; }
+QGroupBox {
+    background: white;
+    border: 1px solid #d9dee5;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding: 14px 12px 10px 12px;
+    font-weight: 600;
+}
+QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }
+QPushButton {
+    background: white;
+    border: 1px solid #c8d0d9;
+    border-radius: 6px;
+    padding: 7px 13px;
+}
+QPushButton:hover { background: #f0f4f8; border-color: #9cabb9; }
+QPushButton:disabled { color: #8c959f; background: #e9edf1; }
+QPushButton#primaryButton {
+    color: white;
+    background: #1769aa;
+    border-color: #1769aa;
+    font-weight: 600;
+}
+QPushButton#primaryButton:hover { background: #12588f; }
+QLineEdit, QComboBox, QListWidget, QPlainTextEdit {
+    background: white;
+    border: 1px solid #cfd6de;
+    border-radius: 5px;
+    padding: 5px;
+    selection-background-color: #2f80c9;
+}
+QLabel:disabled { color: #8c959f; }
+QSpinBox:disabled {
+    color: #8c959f;
+    background: #e3e7eb;
+    border: 1px solid #d4d9df;
+}
+QTabWidget::pane { border: 1px solid #d3dae2; background: white; }
+QTabBar::tab { padding: 9px 18px; background: #e7ebef; }
+QTabBar::tab:selected { background: white; color: #1769aa; font-weight: 600; }
+QListWidget::item { padding: 7px; }
+QListWidget::item:selected { background: #dbeeff; color: #163c5c; }
+QStatusBar { background: #e9edf1; }</string>
+  </property>
+  <widget class="QWidget" name="centralWidget">
+   <layout class="QVBoxLayout" name="centralLayout">
+    <property name="spacing">
+     <number>16</number>
+    </property>
+    <property name="leftMargin">
+     <number>22</number>
+    </property>
+    <property name="topMargin">
+     <number>18</number>
+    </property>
+    <property name="rightMargin">
+     <number>22</number>
+    </property>
+    <property name="bottomMargin">
+     <number>22</number>
+    </property>
+    <item>
+     <layout class="QHBoxLayout" name="headerLayout">
+      <item>
+       <layout class="QVBoxLayout" name="headingLayout">
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="applicationTitle">
+          <property name="text">
+           <string>CopyPhoto</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="applicationSubtitle">
+          <property name="text">
+           <string>Выделение бумажных фотографий на однотонной подложке</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <spacer name="headerSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="restoreButton">
+        <property name="text">
+         <string>Восстановить по умолчанию</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="runButton">
+        <property name="text">
+         <string>Запустить обработку</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QTabWidget" name="tabs">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="SettingsWidget" name="settingsWidget">
+       <attribute name="title">
+        <string>Настройки</string>
+       </attribute>
+      </widget>
+      <widget class="QTabWidget" name="directoryTabs">
+       <property name="currentIndex">
+        <number>0</number>
+       </property>
+       <attribute name="title">
+        <string>Изображения</string>
+       </attribute>
+       <widget class="DirectoryWidget" name="inputFiles">
+        <attribute name="title">
+         <string>Входные</string>
+        </attribute>
+       </widget>
+       <widget class="DirectoryWidget" name="outputFiles">
+        <attribute name="title">
+         <string>Готовые</string>
+        </attribute>
+       </widget>
+       <widget class="DirectoryWidget" name="finalFiles">
+        <attribute name="title">
+         <string>Итоговые</string>
+        </attribute>
+       </widget>
+       <widget class="DirectoryWidget" name="diagnosticFiles">
+        <attribute name="title">
+         <string>Диагностика</string>
+        </attribute>
+       </widget>
+      </widget>
+      <widget class="QWidget" name="logPage">
+       <attribute name="title">
+        <string>Журнал</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="logLayout">
+        <item>
+         <layout class="QHBoxLayout" name="logActionsLayout">
+          <item>
+           <spacer name="logActionsSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="clearLogButton">
+            <property name="text">
+             <string>Очистить журнал</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="saveLogButton">
+            <property name="text">
+             <string>Сохранить журнал…</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QPlainTextEdit" name="log">
+          <property name="lineWrapMode">
+           <enum>QPlainTextEdit::NoWrap</enum>
+          </property>
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>SettingsWidget</class>
+   <extends>QScrollArea</extends>
+   <header>copyphoto.gui.settings_widget</header>
+  </customwidget>
+  <customwidget>
+   <class>DirectoryWidget</class>
+   <extends>QWidget</extends>
+   <header>copyphoto.gui.directory_widget</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import shutil
 from datetime import datetime
+from importlib.resources import as_file, files
 from io import TextIOBase
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
+from PyQt6 import uic
 from PyQt6.QtCore import (
     QObject,
     QThread,
@@ -18,14 +20,11 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import (
     QFileDialog,
-    QHBoxLayout,
-    QLabel,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QTabWidget,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -43,6 +42,9 @@ from copyphoto.gui.settings_widget import SettingsWidget
 
 
 APP_TITLE = "CopyPhoto"
+MAIN_WINDOW_FORM_NAME = "main_window.ui"
+MAIN_WINDOW_FORM = files("copyphoto.gui").joinpath(MAIN_WINDOW_FORM_NAME)
+_WidgetT = TypeVar("_WidgetT", bound=QWidget)
 
 
 class _SignalStream(TextIOBase):
@@ -97,69 +99,53 @@ class MainWindow(QMainWindow):
     """Главное окно управления CopyPhoto."""
 
     def __init__(self) -> None:
-        """Создать страницы приложения, подключить действия и загрузить настройки."""
+        """Загрузить форму окна, подключить действия и прочитать настройки."""
         super().__init__()
         self._thread: QThread | None = None
         self._worker: ProcessingWorker | None = None
         self._settings_dirty = False
         self._last_settings_error = ""
-        self._configure_window()
-        actions = self._create_header_actions()
-        self.tabs = QTabWidget()
-        self._add_settings_tab()
-        self._add_directory_tab()
-        self._add_log_tab()
-        self._set_central_content(actions)
+        self._load_form()
+        self._configure_directory_widgets()
+        self._connect_form_actions()
         self._configure_status_and_auto_save()
         self._load_settings_from_disk()
 
-    def _configure_window(self) -> None:
-        """Задать название и исходные ограничения размера главного окна."""
-        self.setWindowTitle(APP_TITLE)
-        self.resize(980, 840)
-        self.setMinimumSize(800, 700)
+    def _load_form(self) -> None:
+        """Загрузить main_window.ui и связать именованные элементы с атрибутами."""
+        with as_file(MAIN_WINDOW_FORM) as form_path:
+            loaded = uic.loadUi(str(form_path), self)
+        if loaded is not self:
+            raise RuntimeError(f"не удалось загрузить форму {MAIN_WINDOW_FORM_NAME}")
+        self.tabs = self._find(QTabWidget, "tabs")
+        self.settings_widget = self._find(SettingsWidget, "settingsWidget")
+        self.input_files = self._find(DirectoryWidget, "inputFiles")
+        self.output_files = self._find(DirectoryWidget, "outputFiles")
+        self.final_files = self._find(DirectoryWidget, "finalFiles")
+        self.diagnostic_files = self._find(DirectoryWidget, "diagnosticFiles")
+        self.restore_button = self._find(QPushButton, "restoreButton")
+        self.run_button = self._find(QPushButton, "runButton")
+        self.clear_log_button = self._find(QPushButton, "clearLogButton")
+        self.save_log_button = self._find(QPushButton, "saveLogButton")
+        self.log = self._find(QPlainTextEdit, "log")
 
-    def _create_header_actions(self) -> QHBoxLayout:
-        """Создать заголовок и основные кнопки окна."""
-        title = QLabel("CopyPhoto")
-        title.setObjectName("applicationTitle")
-        subtitle = QLabel(
-            "Выделение бумажных фотографий на однотонной подложке"
+    def _find(self, widget_type: type[_WidgetT], name: str) -> _WidgetT:
+        """Найти обязательный элемент загруженной формы по имени объекта."""
+        widget = self.findChild(widget_type, name)
+        if widget is None:
+            raise RuntimeError(
+                f"в форме {MAIN_WINDOW_FORM_NAME} отсутствует {name}"
+            )
+        return widget
+
+    def _configure_directory_widgets(self) -> None:
+        """Назначить файловым вкладкам тексты, ограничения и действия."""
+        self.input_files.configure("Во входном каталоге нет изображений")
+        self.output_files.configure("В каталоге результатов нет изображений")
+        self.final_files.configure(
+            "В итоговом каталоге нет изображений", allow_cleanup=False
         )
-        subtitle.setObjectName("applicationSubtitle")
-        heading = QVBoxLayout()
-        heading.setSpacing(0)
-        heading.addWidget(title)
-        heading.addWidget(subtitle)
-
-        self.restore_button = QPushButton("Восстановить по умолчанию")
-        self.restore_button.clicked.connect(lambda: self.restore_defaults())
-        self.run_button = QPushButton("Запустить обработку")
-        self.run_button.setObjectName("primaryButton")
-        self.run_button.clicked.connect(self.start_processing)
-
-        actions = QHBoxLayout()
-        actions.addLayout(heading, 1)
-        actions.addWidget(self.restore_button)
-        actions.addWidget(self.run_button)
-        return actions
-
-    def _add_settings_tab(self) -> None:
-        """Создать и добавить вкладку операторских настроек."""
-        self.settings_widget = SettingsWidget()
-        self.settings_widget.settings_changed.connect(self._schedule_auto_save)
-        self.tabs.addTab(self.settings_widget, "Настройки")
-
-    def _add_directory_tab(self) -> None:
-        """Создать вкладки входных, готовых, итоговых и диагностических файлов."""
-        self.directory_tabs = QTabWidget()
-        self.input_files = DirectoryWidget("Во входном каталоге нет изображений")
-        self.output_files = DirectoryWidget("В каталоге результатов нет изображений")
-        self.final_files = DirectoryWidget(
-            "В итоговом каталоге нет изображений",
-            allow_cleanup=False,
-        )
-        self.diagnostic_files = DirectoryWidget(
+        self.diagnostic_files.configure(
             "В диагностическом каталоге нет изображений"
         )
         self.input_select_all_button = self.input_files.add_select_all_action()
@@ -172,48 +158,21 @@ class MainWindow(QMainWindow):
             "В итоговые…",
             lambda: self._confirm_move_to_final("output"),
         )
-        self.directory_tabs.addTab(self.input_files, "Входные")
-        self.directory_tabs.addTab(self.output_files, "Готовые")
-        self.directory_tabs.addTab(self.final_files, "Итоговые")
-        self.directory_tabs.addTab(self.diagnostic_files, "Диагностика")
-        self.tabs.addTab(self.directory_tabs, "Изображения")
 
-    def _add_log_tab(self) -> None:
-        """Создать вкладку журнала с действиями очистки и сохранения."""
-        log_page = QWidget()
-        log_layout = QVBoxLayout(log_page)
-        log_actions = QHBoxLayout()
-        clear_log_button = QPushButton("Очистить журнал")
-        clear_log_button.clicked.connect(self._clear_log)
-        save_log_button = QPushButton("Сохранить журнал…")
-        save_log_button.clicked.connect(self._save_log)
-        log_actions.addStretch(1)
-        log_actions.addWidget(clear_log_button)
-        log_actions.addWidget(save_log_button)
-        self.log = QPlainTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        log_layout.addLayout(log_actions)
-        log_layout.addWidget(self.log, 1)
-        self.tabs.addTab(log_page, "Журнал")
-
-    def _set_central_content(self, actions: QHBoxLayout) -> None:
-        """Разместить верхние действия и вкладки в центральном виджете."""
-        central = QWidget()
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(22, 18, 22, 22)
-        layout.setSpacing(16)
-        layout.addLayout(actions)
-        layout.addWidget(self.tabs, 1)
-        self.setCentralWidget(central)
+    def _connect_form_actions(self) -> None:
+        """Подключить сигналы элементов основной формы к обработчикам окна."""
+        self.restore_button.clicked.connect(lambda: self.restore_defaults())
+        self.run_button.clicked.connect(self.start_processing)
+        self.clear_log_button.clicked.connect(self._clear_log)
+        self.save_log_button.clicked.connect(self._save_log)
+        self.settings_widget.settings_changed.connect(self._schedule_auto_save)
 
     def _configure_status_and_auto_save(self) -> None:
-        """Настроить строку состояния, стиль и таймер сохранения настроек."""
+        """Настроить строку состояния и таймер сохранения настроек."""
         status_bar = self.statusBar()
         assert status_bar is not None
         self.status_bar = status_bar
         self.status_bar.showMessage(f"Настройки: {SETTINGS_PATH}")
-        self.setStyleSheet(_STYLE_SHEET)
 
         self._auto_save_timer = QTimer(self)
         self._auto_save_timer.setSingleShot(True)
@@ -684,54 +643,3 @@ class MainWindow(QMainWindow):
                 event.ignore()
             return
         event.accept()
-
-
-_STYLE_SHEET = """
-QMainWindow { background: #f4f6f8; }
-QWidget { font-family: "Segoe UI"; font-size: 10pt; color: #20242a; }
-QLabel#applicationTitle { font-size: 22pt; font-weight: 650; color: #17212b; }
-QLabel#applicationSubtitle { color: #647181; padding-top: 2px; }
-QGroupBox {
-    background: white;
-    border: 1px solid #d9dee5;
-    border-radius: 8px;
-    margin-top: 12px;
-    padding: 14px 12px 10px 12px;
-    font-weight: 600;
-}
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }
-QPushButton {
-    background: white;
-    border: 1px solid #c8d0d9;
-    border-radius: 6px;
-    padding: 7px 13px;
-}
-QPushButton:hover { background: #f0f4f8; border-color: #9cabb9; }
-QPushButton:disabled { color: #8c959f; background: #e9edf1; }
-QPushButton#primaryButton {
-    color: white;
-    background: #1769aa;
-    border-color: #1769aa;
-    font-weight: 600;
-}
-QPushButton#primaryButton:hover { background: #12588f; }
-QLineEdit, QComboBox, QListWidget, QPlainTextEdit {
-    background: white;
-    border: 1px solid #cfd6de;
-    border-radius: 5px;
-    padding: 5px;
-    selection-background-color: #2f80c9;
-}
-QLabel:disabled { color: #8c959f; }
-QSpinBox:disabled {
-    color: #8c959f;
-    background: #e3e7eb;
-    border: 1px solid #d4d9df;
-}
-QTabWidget::pane { border: 1px solid #d3dae2; background: white; }
-QTabBar::tab { padding: 9px 18px; background: #e7ebef; }
-QTabBar::tab:selected { background: white; color: #1769aa; font-weight: 600; }
-QListWidget::item { padding: 7px; }
-QListWidget::item:selected { background: #dbeeff; color: #163c5c; }
-QStatusBar { background: #e9edf1; }
-"""

@@ -14,7 +14,9 @@ from PyQt6.QtWidgets import QApplication, QDialogButtonBox, QFileDialog
 
 import copyphoto.gui.main_window as main_window_module
 from copyphoto.album_processor.settings_editor import read_operator_settings
-from copyphoto.gui import DirectoryWidget, MainWindow, SettingsWidget
+from copyphoto.gui.directory_widget import DirectoryWidget
+from copyphoto.gui.main_window import MainWindow
+from copyphoto.gui.settings_widget import SettingsWidget
 
 
 SETTINGS_TEXT = """[Каталоги]
@@ -106,7 +108,7 @@ def test_final_directory_has_no_cleanup_and_move_does_not_overwrite(
     existing_png = final_directory / "photo_0001.png"
     existing_jpeg.write_text("existing jpg", encoding="utf-8")
     existing_png.write_text("existing png", encoding="utf-8")
-    final_widget = DirectoryWidget("Пусто", allow_cleanup=False)
+    final_widget = DirectoryWidget(empty_text="Пусто", allow_cleanup=False)
     assert final_widget.clear_button.isHidden()
     moved, failures = MainWindow._move_files_to_final(
         [movable, collision],
@@ -226,7 +228,7 @@ def test_directory_cleanup_moves_only_supported_top_level_images(
         "_move_to_trash",
         staticmethod(move_to_trash),
     )
-    widget = DirectoryWidget("Пусто")
+    widget = DirectoryWidget(empty_text="Пусто")
     widget.set_directory(tmp_path)
     select_all_button = widget.add_select_all_action()
     select_all_button.click()
